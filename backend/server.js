@@ -15,6 +15,7 @@ function createApp() {
   app.use('/api/v1', require('./routes/leadRoutes'));
   app.use('/api/v1', require('./routes/webhookRoutes'));
   app.use('/api/v1', require('./routes/importRoutes'));
+  app.use('/api/v1', require('./routes/statsRoutes'));
 
   // error handler — keep last; all routers mount above
   app.use((err, req, res, next) => {

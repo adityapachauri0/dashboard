@@ -1,11 +1,16 @@
+const mongoose = require('mongoose');
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Shared by lead list, stats and CSV export. Affiliate users are ALWAYS
 // pinned to their own affiliate_id from the JWT — client filters can't widen it.
 function buildLeadFilter(query, user) {
   const filter = {};
-  if (user.role === 'affiliate') filter.affiliate_id = user.affiliate_id;
-  else if (query.affiliate_id) filter.affiliate_id = query.affiliate_id;
+  if (user.role === 'affiliate') filter.affiliate_id = new mongoose.Types.ObjectId(String(user.affiliate_id));
+  else if (query.affiliate_id) {
+    if (mongoose.isValidObjectId(query.affiliate_id)) {
+      filter.affiliate_id = new mongoose.Types.ObjectId(String(query.affiliate_id));
+    }
+  }
 
   for (const f of ['brand', 'initial_status', 'search_status', 'signature_status', 'payable_status']) {
     if (query[f]) filter[f] = query[f];
