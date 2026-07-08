@@ -65,3 +65,22 @@ test('admin can create affiliate login user', async () => {
   assert.strictEqual(u.role, 'affiliate');
   assert.strictEqual(u.affiliate_id.toString(), aff._id.toString());
 });
+
+test('malformed affiliate id returns 400, not a crash', async () => {
+  const app = createApp();
+  const token = await adminToken();
+  const res = await request(app).patch('/api/v1/affiliates/not-an-id').set('Authorization', `Bearer ${token}`).send({ name: 'X' });
+  assert.strictEqual(res.status, 400);
+});
+
+test('partial rate_card PATCH preserves other rates', async () => {
+  const app = createApp();
+  const token = await adminToken();
+  const created = await request(app).post('/api/v1/affiliates').set('Authorization', `Bearer ${token}`)
+    .send({ name: 'R', lead_source: 'r1', rate_card: { virgin_rate: 40, searched_upfront_rate: 15, searched_confirmation_rate: 25 } });
+  const res = await request(app).patch(`/api/v1/affiliates/${created.body.affiliate._id}`)
+    .set('Authorization', `Bearer ${token}`).send({ rate_card: { virgin_rate: 99 } });
+  assert.strictEqual(res.body.rate_card.virgin_rate, 99);
+  assert.strictEqual(res.body.rate_card.searched_upfront_rate, 15);
+  assert.strictEqual(res.body.rate_card.searched_confirmation_rate, 25);
+});

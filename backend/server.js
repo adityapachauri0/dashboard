@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+require('express-async-errors');
 const { connectDB } = require('./config/db');
 
 function createApp() {
@@ -10,6 +11,15 @@ function createApp() {
   app.get('/api/v1/health', (req, res) => res.json({ ok: true }));
   app.use('/api/v1', require('./routes/authRoutes'));
   app.use('/api/v1', require('./routes/affiliateRoutes'));
+
+  // error handler — keep last; all routers mount above
+  app.use((err, req, res, next) => {
+    if (err.name === 'CastError') return res.status(400).json({ error: 'invalid id' });
+    if (err.name === 'ValidationError') return res.status(400).json({ error: err.message });
+    if (err.code === 11000) return res.status(409).json({ error: 'duplicate value' });
+    console.error(err);
+    res.status(500).json({ error: 'internal error' });
+  });
 
   return app;
 }

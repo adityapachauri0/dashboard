@@ -30,8 +30,14 @@ router.post('/affiliates', async (req, res) => {
 
 router.patch('/affiliates/:id', async (req, res) => {
   const allowed = {};
-  for (const f of ['name', 'brands', 'rate_card', 'active']) {
+  for (const f of ['name', 'brands', 'active']) {
     if (f in req.body) allowed[f] = req.body[f];
+  }
+  if (req.body.rate_card) {
+    // merge via dot-notation so a partial rate_card never zeroes the other rates
+    for (const k of ['virgin_rate', 'searched_upfront_rate', 'searched_confirmation_rate', 'currency']) {
+      if (k in req.body.rate_card) allowed[`rate_card.${k}`] = req.body.rate_card[k];
+    }
   }
   const affiliate = await Affiliate.findByIdAndUpdate(req.params.id, allowed, { new: true }).select('-api_key_hash');
   if (!affiliate) return res.status(404).json({ error: 'not found' });
