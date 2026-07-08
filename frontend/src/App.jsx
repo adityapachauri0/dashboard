@@ -3,6 +3,7 @@ import { AppShell, NavLink, Group, Title, Button, Text } from '@mantine/core';
 import { getUser, logout } from './api';
 import Login from './pages/Login';
 import Summary from './pages/Summary';
+import Leads from './pages/Leads';
 
 function Shell({ children }) {
   const user = getUser();
@@ -46,7 +47,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<RequireAuth><Summary /></RequireAuth>} />
-        <Route path="/leads" element={<RequireAuth><div>Leads (Task 15)</div></RequireAuth>} />
+        <Route path="/leads" element={<RequireAuth><Leads /></RequireAuth>} />
         <Route path="/affiliates" element={<RequireAuth><div>Affiliates (Task 16)</div></RequireAuth>} />
         <Route path="/imports" element={<RequireAuth><div>Imports (Task 17)</div></RequireAuth>} />
         <Route path="/export" element={<RequireAuth><div>Export (Task 18)</div></RequireAuth>} />
