@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Summary from './pages/Summary';
 import Leads from './pages/Leads';
 import Affiliates from './pages/Affiliates';
+import Imports from './pages/Imports';
 
 function Shell({ children }) {
   const user = getUser();
@@ -50,7 +51,7 @@ export default function App() {
         <Route path="/" element={<RequireAuth><Summary /></RequireAuth>} />
         <Route path="/leads" element={<RequireAuth><Leads /></RequireAuth>} />
         <Route path="/affiliates" element={<RequireAuth><Affiliates /></RequireAuth>} />
-        <Route path="/imports" element={<RequireAuth><div>Imports (Task 17)</div></RequireAuth>} />
+        <Route path="/imports" element={<RequireAuth><Imports /></RequireAuth>} />
         <Route path="/export" element={<RequireAuth><div>Export (Task 18)</div></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
