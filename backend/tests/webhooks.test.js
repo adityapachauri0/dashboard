@@ -1,5 +1,6 @@
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
+const mongoose = require('mongoose');
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 const { setupDB, teardownDB, clearDB } = require('./helpers');
@@ -54,6 +55,18 @@ test('webhook token enforced when configured', async () => {
   const ok = await request(createApp()).post('/api/v1/webhooks/platform?token=sekret').send({ ref: 'x' });
   assert.strictEqual(ok.status, 200);
   delete process.env.WEBHOOK_TOKEN;
+});
+
+test('webhook for lead with missing affiliate still returns 200 and matches', async () => {
+  const lead = await Lead.create({ ref: 'KB-2026-000042', affiliate_id: new mongoose.Types.ObjectId(), lead_source: 'ghost', applicant_name: 'Ghost' });
+  const res = await request(createApp())
+    .post('/api/v1/webhooks/platform')
+    .send({ ref: 'KB-2026-000042', status: 'accepted', credit_search: 'virgin' });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.matched, true);
+  const updated = await Lead.findById(lead._id);
+  assert.strictEqual(updated.initial_status, 'accepted');
+  assert.strictEqual(updated.amounts.total_due, 0); // no rate card -> £0, but no crash
 });
 
 test('admin can manually match an unmatched event', async () => {

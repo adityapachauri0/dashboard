@@ -54,12 +54,12 @@ router.patch('/dashboard/leads/:id', requireAuth, requireAdmin, async (req, res)
     lead.replaces_lead = original._id;
     original.replaced_by_lead = lead._id;
     original.history.push({ at: now, field: 'replaced_by_lead', from: null, to: lead.ref, source: 'manual', user: req.user.email });
-    applyStatusChanges(original, {}, affiliate.rate_card, meta);
+    applyStatusChanges(original, {}, affiliate?.rate_card || {}, meta);
     await original.save();
     lead.history.push({ at: now, field: 'replaces_lead', from: null, to: original.ref, source: 'manual', user: req.user.email });
   }
 
-  applyStatusChanges(lead, req.body, affiliate.rate_card, meta);
+  applyStatusChanges(lead, req.body, affiliate?.rate_card || {}, meta);
   await lead.save();
   res.json(lead.toObject());
 });

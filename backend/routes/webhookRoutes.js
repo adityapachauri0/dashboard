@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const Lead = require('../models/Lead');
 const Affiliate = require('../models/Affiliate');
 const WebhookEvent = require('../models/WebhookEvent');
@@ -8,18 +9,21 @@ const { applyStatusChanges } = require('../services/statusService');
 
 const router = express.Router();
 
+const webhookLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
+
 async function applyEventToLead(event, lead) {
   const changes = canonicalFromPayload(event.payload);
   const pref = event.payload.platform_ref || event.payload.reference || event.payload.id;
   if (pref && !lead.platform_ref) changes.platform_ref = String(pref);
   const affiliate = await Affiliate.findById(lead.affiliate_id);
-  applyStatusChanges(lead, changes, affiliate.rate_card, { source: 'webhook' });
+  // orphaned affiliate -> zero rate card; computeMoney treats missing rates as 0
+  applyStatusChanges(lead, changes, affiliate?.rate_card || {}, { source: 'webhook' });
   await lead.save();
   event.matched_lead = lead._id;
   await event.save();
 }
 
-router.post('/webhooks/platform', async (req, res) => {
+router.post('/webhooks/platform', webhookLimiter, async (req, res) => {
   if (process.env.WEBHOOK_TOKEN && req.query.token !== process.env.WEBHOOK_TOKEN) {
     return res.status(401).json({ error: 'bad token' });
   }
