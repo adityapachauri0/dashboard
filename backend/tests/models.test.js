@@ -16,6 +16,13 @@ test('nextLeadRef produces sequential zero-padded refs', async () => {
   assert.strictEqual(b, 'KB-2026-000002');
 });
 
+test('nextLeadRef sequence resets for a new year', async () => {
+  const a = await nextLeadRef(new Date('2026-07-08'));
+  const b = await nextLeadRef(new Date('2027-01-02'));
+  assert.strictEqual(a, 'KB-2026-000001');
+  assert.strictEqual(b, 'KB-2027-000001');
+});
+
 test('lead defaults match spec', async () => {
   const aff = await Affiliate.create({ name: 'Acme Leads', lead_source: 'acme' });
   const lead = await Lead.create({

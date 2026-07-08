@@ -6,12 +6,13 @@ const Counter = mongoose.model(
 );
 
 async function nextLeadRef(date = new Date()) {
+  const year = date.getFullYear();
   const c = await Counter.findByIdAndUpdate(
-    'lead_ref',
+    `lead_ref_${year}`,
     { $inc: { seq: 1 } },
     { new: true, upsert: true }
   );
-  return `KB-${date.getFullYear()}-${String(c.seq).padStart(6, '0')}`;
+  return `KB-${year}-${String(c.seq).padStart(6, '0')}`;
 }
 
 module.exports = { Counter, nextLeadRef };
