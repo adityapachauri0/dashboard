@@ -1,0 +1,18 @@
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const User = require('../models/User');
+const { signToken } = require('../middleware/auth');
+
+const router = express.Router();
+
+router.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  const user = await User.findOne({ email: String(email).toLowerCase() });
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    return res.status(401).json({ error: 'invalid credentials' });
+  }
+  res.json({ token: signToken(user), role: user.role, email: user.email, affiliate_id: user.affiliate_id });
+});
+
+module.exports = router;

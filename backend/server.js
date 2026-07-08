@@ -8,6 +8,7 @@ function createApp() {
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/v1/health', (req, res) => res.json({ ok: true }));
+  app.use('/api/v1', require('./routes/authRoutes'));
 
   return app;
 }
