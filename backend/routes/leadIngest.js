@@ -24,22 +24,35 @@ router.post('/leads', ingestLimiter, apiKeyAuth, async (req, res) => {
     ref: await nextLeadRef(submitted_at),
     affiliate_id: req.affiliate._id,
     lead_source: req.affiliate.lead_source,
-    brand: body.brand || req.affiliate.brands?.[0] || '',
+    brand: str(body.brand) || req.affiliate.brands?.[0] || '',
     submitted_at,
     signature_deadline: new Date(submitted_at.getTime() + 48 * 3600 * 1000),
     applicant_name,
     payload: body,
   });
 
+  try {
+    await lead.validate();
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
   // Replacement for a signature-failed lead: link both ways, zero the original.
+  // Validate the new lead BEFORE touching the original, and claim it atomically
+  // (findOneAndUpdate on replaced_by_lead: null) so two concurrent replacements
+  // can't both pass a read-then-write check.
   if (body.replaces_ref) {
-    const original = await Lead.findOne({ ref: body.replaces_ref, affiliate_id: req.affiliate._id });
-    if (!original) return res.status(400).json({ error: `replaces_ref ${body.replaces_ref} not found` });
-    if (original.replaced_by_lead) {
-      return res.status(409).json({ error: `lead ${original.ref} already replaced` });
+    const original = await Lead.findOneAndUpdate(
+      { ref: body.replaces_ref, affiliate_id: req.affiliate._id, replaced_by_lead: null },
+      { replaced_by_lead: lead._id },
+      { new: true }
+    );
+    if (!original) {
+      const exists = await Lead.exists({ ref: body.replaces_ref, affiliate_id: req.affiliate._id });
+      if (exists) return res.status(409).json({ error: `lead ${body.replaces_ref} already replaced` });
+      return res.status(400).json({ error: `replaces_ref ${body.replaces_ref} not found` });
     }
     lead.replaces_lead = original._id;
-    original.replaced_by_lead = lead._id;
     original.history.push({ at: submitted_at, field: 'replaced_by_lead', from: null, to: lead.ref, source: 'api' });
     applyStatusChanges(original, {}, req.affiliate.rate_card, { source: 'api' });
     await original.save();

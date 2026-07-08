@@ -13,13 +13,13 @@ function buildLeadFilter(query, user) {
   }
 
   for (const f of ['brand', 'initial_status', 'search_status', 'signature_status', 'payable_status']) {
-    if (query[f]) filter[f] = query[f];
+    if (typeof query[f] === 'string' && query[f]) filter[f] = query[f];
   }
   if (query.needs_replacement === 'true') filter.needs_replacement = true;
   if (query.from || query.to) filter.submitted_at = {};
   if (query.from) filter.submitted_at.$gte = new Date(query.from);
   if (query.to) filter.submitted_at.$lte = new Date(new Date(query.to).setHours(23, 59, 59, 999));
-  if (query.q) {
+  if (typeof query.q === 'string' && query.q) {
     const rx = new RegExp(escapeRegex(query.q), 'i');
     filter.$or = [{ ref: rx }, { applicant_name: rx }, { platform_ref: rx }];
   }

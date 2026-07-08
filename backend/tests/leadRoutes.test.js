@@ -84,6 +84,14 @@ test('admin PATCH replaces_ref links this lead as replacement', async () => {
   assert.strictEqual(ok.status, 200);
   const orig = await Lead.findById(leadA._id);
   assert.strictEqual(orig.payable_status, 'replaced');
+
+  // `own` is now a replacement itself — linking it to a second original must be rejected.
+  const secondOriginal = await Lead.create({ ref: 'KB-2026-000004', affiliate_id: leadA.affiliate_id, lead_source: 'aaa', applicant_name: 'Alpha Four' });
+  const again = await request(app)
+    .patch(`/api/v1/dashboard/leads/${own._id}`)
+    .set('Authorization', `Bearer ${signToken(admin)}`)
+    .send({ replaces_ref: secondOriginal.ref });
+  assert.strictEqual(again.status, 409);
 });
 
 test('PATCH replaces_ref rejects non-string (injection guard)', async () => {

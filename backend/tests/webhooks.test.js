@@ -57,6 +57,14 @@ test('webhook token enforced when configured', async () => {
   delete process.env.WEBHOOK_TOKEN;
 });
 
+test('webhook refuses to run open in production', async () => {
+  process.env.NODE_ENV = 'production';
+  delete process.env.WEBHOOK_TOKEN;
+  const res = await request(createApp()).post('/api/v1/webhooks/platform').send({ ref: 'x' });
+  assert.strictEqual(res.status, 503);
+  delete process.env.NODE_ENV;
+});
+
 test('webhook for lead with missing affiliate still returns 200 and matches', async () => {
   const lead = await Lead.create({ ref: 'KB-2026-000042', affiliate_id: new mongoose.Types.ObjectId(), lead_source: 'ghost', applicant_name: 'Ghost' });
   const res = await request(createApp())

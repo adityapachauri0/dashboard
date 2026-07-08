@@ -10,7 +10,7 @@ const router = express.Router();
 router.get('/dashboard/leads', requireAuth, async (req, res) => {
   const filter = buildLeadFilter(req.query, req.user);
   const page = Math.max(1, Number(req.query.page) || 1);
-  const limit = Math.min(200, Number(req.query.limit) || 50);
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
   const [total, rows] = await Promise.all([
     Lead.countDocuments(filter),
     Lead.find(filter).sort({ submitted_at: -1 }).skip((page - 1) * limit).limit(limit)
@@ -45,6 +45,7 @@ router.patch('/dashboard/leads/:id', requireAuth, requireAdmin, async (req, res)
   const now = new Date();
 
   if (req.body.replaces_ref) {
+    if (lead.replaces_lead) return res.status(409).json({ error: `lead ${lead.ref} is already a replacement` });
     const original = await Lead.findOne({ ref: req.body.replaces_ref, affiliate_id: lead.affiliate_id });
     if (!original) return res.status(400).json({ error: `replaces_ref ${req.body.replaces_ref} not found for this affiliate` });
     // Double-replacement guard — right after the `if (!original)` check

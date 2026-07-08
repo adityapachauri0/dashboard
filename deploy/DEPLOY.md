@@ -7,7 +7,7 @@ Target: VPS 31.97.57.193 (srv897225), port 5005, Mongo db `pcp-affiliates`.
 2. Backend:
    - `cd /var/www/pcp-affiliate-dashboard/backend && npm install --omit=dev`
    - `cp .env.example .env` and fill: `MONGO_URI=mongodb://127.0.0.1:27017/pcp-affiliates`,
-     strong `JWT_SECRET`, optional `SHARED_API_KEY` / `WEBHOOK_TOKEN`.
+     strong `JWT_SECRET`, `WEBHOOK_TOKEN` (required in production), optional `SHARED_API_KEY`.
    - `node scripts/createAdmin.js <email> '<password>'`
    - `pm2 start server.js --name pcp-affiliate-api && pm2 save`
 3. Frontend: `cd ../frontend && npm install && npm run build` (dist/ is served by nginx)

@@ -41,6 +41,7 @@ export default function Affiliates() {
     try {
       const res = await api(`/affiliates/${a._id}/rotate-key`, { method: 'POST' });
       setNewKey({ name: a.name, key: res.api_key });
+      load();
     } catch (e) { setError(e.message); }
   }
 

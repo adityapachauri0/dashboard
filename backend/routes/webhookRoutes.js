@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const Lead = require('../models/Lead');
 const Affiliate = require('../models/Affiliate');
@@ -24,8 +25,18 @@ async function applyEventToLead(event, lead) {
 }
 
 router.post('/webhooks/platform', webhookLimiter, async (req, res) => {
-  if (process.env.WEBHOOK_TOKEN && req.query.token !== process.env.WEBHOOK_TOKEN) {
-    return res.status(401).json({ error: 'bad token' });
+  const configured = process.env.WEBHOOK_TOKEN;
+  if (!configured) {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'webhook disabled: WEBHOOK_TOKEN not configured' });
+    }
+  } else {
+    const supplied = String(req.query.token || '');
+    const a = Buffer.from(supplied);
+    const b = Buffer.from(configured);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: 'bad token' });
+    }
   }
   const payload = req.body || {};
   const event = await WebhookEvent.create({ payload, source_ip: req.ip });
@@ -49,6 +60,7 @@ router.get('/webhooks/unmatched', requireAuth, requireAdmin, async (req, res) =>
 router.post('/webhooks/:id/match', requireAuth, requireAdmin, async (req, res) => {
   const event = await WebhookEvent.findById(req.params.id);
   if (!event) return res.status(404).json({ error: 'event not found' });
+  if (event.matched_lead) return res.status(409).json({ error: 'event already matched' });
   if (typeof req.body?.ref !== 'string') return res.status(400).json({ error: 'ref must be a string' });
   const lead = await Lead.findOne({ ref: req.body.ref });
   if (!lead) return res.status(400).json({ error: 'lead ref not found' });

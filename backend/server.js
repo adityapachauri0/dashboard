@@ -33,6 +33,10 @@ function createApp() {
 module.exports = { createApp };
 
 if (require.main === module) {
+  if (!process.env.JWT_SECRET) {
+    console.error('JWT_SECRET is required');
+    process.exit(1);
+  }
   connectDB().then(() => {
     const port = process.env.PORT || 5005;
     createApp().listen(port, () => console.log(`pcp-affiliate-api on :${port}`));

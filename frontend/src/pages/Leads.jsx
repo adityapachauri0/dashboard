@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert, Badge, Button, Drawer, Group, Pagination, Select, Stack, Switch, Table, Text,
   TextInput, Timeline, Title, Code, Divider,
@@ -15,6 +15,7 @@ export default function Leads() {
   const user = getUser();
   const isAdmin = user.role === 'admin';
   const [filters, setFilters] = useState({ affiliate_id: null, initial_status: null, search_status: null, signature_status: null, payable_status: null, q: '' });
+  const [qInput, setQInput] = useState('');
   const [range, setRange] = useState([null, null]);
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ rows: [], total: 0 });
@@ -23,20 +24,28 @@ export default function Leads() {
   const [edit, setEdit] = useState({});
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (isAdmin) api('/affiliates').then(setAffiliates).catch(() => {});
   }, [isAdmin]);
 
-  const load = useCallback(() => {
+  const set = (k) => (v) => { setPage(1); setFilters((f) => ({ ...f, [k]: v })); };
+
+  useEffect(() => {
+    const t = setTimeout(() => { if (qInput !== filters.q) set('q')(qInput); }, 300);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
+  useEffect(() => {
+    let stale = false;
     const params = new URLSearchParams({ page, limit: PAGE_SIZE });
     for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
     if (range[0]) params.set('from', dayjs(range[0]).format('YYYY-MM-DD'));
     if (range[1]) params.set('to', dayjs(range[1]).format('YYYY-MM-DD'));
-    api(`/dashboard/leads?${params}`).then(setData).catch((e) => setError(e.message));
-  }, [filters, range, page]);
-
-  useEffect(load, [load]);
+    api(`/dashboard/leads?${params}`).then((d) => { if (!stale) setData(d); }).catch((e) => { if (!stale) setError(e.message); });
+    return () => { stale = true; };
+  }, [filters, range, page, refreshKey]);
 
   async function openDetail(id) {
     try {
@@ -51,11 +60,9 @@ export default function Leads() {
     try {
       await api(`/dashboard/leads/${selected._id}`, { method: 'PATCH', body: edit });
       await openDetail(selected._id);
-      load();
+      setRefreshKey((k) => k + 1);
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
-
-  const set = (k) => (v) => { setPage(1); setFilters((f) => ({ ...f, [k]: v })); };
 
   return (
     <>
@@ -71,7 +78,7 @@ export default function Leads() {
         <Select placeholder="Signature" clearable w={140} data={opts(['pending', 'passed', 'failed'])} value={filters.signature_status} onChange={set('signature_status')} />
         <Select placeholder="Payable" clearable w={200} data={opts(['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'])} value={filters.payable_status} onChange={set('payable_status')} />
         <DatePickerInput type="range" placeholder="Date range" clearable value={range} onChange={(v) => { setPage(1); setRange(v); }} w={240} />
-        <TextInput placeholder="Search ref / name" value={filters.q} onChange={(e) => set('q')(e.target.value)} w={180} />
+        <TextInput placeholder="Search ref / name" value={qInput} onChange={(e) => setQInput(e.target.value)} w={180} />
       </Group>
 
       <Table striped highlightOnHover withTableBorder>

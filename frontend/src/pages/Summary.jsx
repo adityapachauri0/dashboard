@@ -23,10 +23,12 @@ export default function Summary() {
   useEffect(() => {
     const [from, to] = range;
     if (!from || !to) return;
+    let stale = false;
     const qs = `?from=${dayjs(from).format('YYYY-MM-DD')}&to=${dayjs(to).format('YYYY-MM-DD')}`;
     Promise.all([api(`/dashboard/summary${qs}`), api(`/dashboard/affiliate-breakdown${qs}`)])
-      .then(([s, b]) => { setSummary(s); setBreakdown(b); setError(null); })
-      .catch((e) => setError(e.message));
+      .then(([s, b]) => { if (!stale) { setSummary(s); setBreakdown(b); setError(null); } })
+      .catch((e) => { if (!stale) setError(e.message); });
+    return () => { stale = true; };
   }, [range]);
 
   return (

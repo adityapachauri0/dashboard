@@ -29,6 +29,7 @@ export default function Imports() {
   useEffect(load, [load]);
 
   async function doPreview() {
+    const isFirstPreview = preview === null;
     setBusy(true); setError(null); setResult(null);
     try {
       const fd = new FormData();
@@ -36,7 +37,7 @@ export default function Imports() {
       const p = await api('/imports/preview', { method: 'POST', formData: fd });
       setPreview(p);
       const last = await api('/imports/last-mapping');
-      if (last) setMapping(last);
+      if (last && isFirstPreview) setMapping(last);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
