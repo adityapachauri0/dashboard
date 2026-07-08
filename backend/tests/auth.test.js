@@ -28,7 +28,7 @@ test('login rejects bad password', async () => {
   assert.strictEqual(res.status, 401);
 });
 
-test('requireAuth blocks missing/invalid token', { todo: true }, async () => {
+test('requireAuth blocks missing/invalid token', async () => {
   const res = await request(createApp()).get('/api/v1/dashboard/leads');
   assert.strictEqual(res.status, 401);
 });
