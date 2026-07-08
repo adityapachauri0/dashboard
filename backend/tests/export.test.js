@@ -33,3 +33,14 @@ test('export returns csv with headers, money columns and scoping', async () => {
   assert.match(lines[1], /,40,0,40,/);
   assert.ok(!res.text.includes('KB-2026-000002'));
 });
+
+test('export neutralises formula-prefixed free text', async () => {
+  const aff = await Affiliate.create({ name: 'C', lead_source: 'ccc' });
+  await Lead.create({ ref: 'KB-2026-000009', affiliate_id: aff._id, lead_source: 'ccc', applicant_name: '=HYPERLINK("http://evil")' });
+  const admin = await User.create({ email: 'adm@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  const res = await request(createApp())
+    .get('/api/v1/dashboard/export.csv')
+    .set('Authorization', `Bearer ${signToken(admin)}`);
+  assert.ok(res.text.includes(`'=HYPERLINK`));
+  assert.ok(!/,=HYPERLINK/.test(res.text));
+});
