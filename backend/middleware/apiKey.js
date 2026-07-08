@@ -6,7 +6,7 @@ async function apiKeyAuth(req, res, next) {
   if (!key) return res.status(401).json({ error: 'X-API-Key required' });
 
   if (process.env.SHARED_API_KEY && key === process.env.SHARED_API_KEY) {
-    const src = (req.body?.lead_source || '').toLowerCase().trim();
+    const src = typeof req.body?.lead_source === 'string' ? req.body.lead_source.toLowerCase().trim() : '';
     if (!src) return res.status(400).json({ error: 'lead_source required with shared key' });
     const affiliate = await Affiliate.findOne({ lead_source: src, active: true });
     if (!affiliate) return res.status(401).json({ error: 'unknown lead_source' });

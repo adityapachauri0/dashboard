@@ -59,6 +59,23 @@ test('shared key requires and resolves lead_source', async () => {
   delete process.env.SHARED_API_KEY;
 });
 
+test('replaces_ref rejects non-string (injection guard)', async () => {
+  const { key } = await makeAffiliate('inj');
+  const res = await request(createApp()).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'A', last_name: 'B', email: 'a@b.c', replaces_ref: { $ne: null } });
+  assert.strictEqual(res.status, 400);
+});
+
+test('second replacement of same original is rejected 409', async () => {
+  const { aff, key } = await makeAffiliate('dup');
+  const app = createApp();
+  const first = await request(app).post('/api/v1/leads').set('X-API-Key', key).send({ first_name: 'O', last_name: 'L', email: 'o@x.com' });
+  const r1 = await request(app).post('/api/v1/leads').set('X-API-Key', key).send({ first_name: 'R', last_name: 'One', email: 'r1@x.com', replaces_ref: first.body.ref });
+  assert.strictEqual(r1.status, 201);
+  const r2 = await request(app).post('/api/v1/leads').set('X-API-Key', key).send({ first_name: 'R', last_name: 'Two', email: 'r2@x.com', replaces_ref: first.body.ref });
+  assert.strictEqual(r2.status, 409);
+});
+
 test('replaces_ref links replacement and zeroes the original', async () => {
   const { aff, key } = await makeAffiliate();
   const app = createApp();

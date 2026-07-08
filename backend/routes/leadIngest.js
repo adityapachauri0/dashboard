@@ -11,9 +11,13 @@ const ingestLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: t
 
 router.post('/leads', ingestLimiter, apiKeyAuth, async (req, res) => {
   const body = req.body || {};
-  const applicant_name = (body.name || `${body.first_name || ''} ${body.last_name || ''}`).trim();
+  const str = (v) => (typeof v === 'string' ? v : '');
+  const applicant_name = (str(body.name) || `${str(body.first_name)} ${str(body.last_name)}`).trim();
   if (!applicant_name) return res.status(400).json({ error: 'name (or first_name/last_name) required' });
   if (!body.email && !body.phone) return res.status(400).json({ error: 'email or phone required' });
+  if ('replaces_ref' in body && typeof body.replaces_ref !== 'string') {
+    return res.status(400).json({ error: 'replaces_ref must be a string' });
+  }
 
   const submitted_at = new Date();
   const lead = new Lead({
@@ -31,6 +35,9 @@ router.post('/leads', ingestLimiter, apiKeyAuth, async (req, res) => {
   if (body.replaces_ref) {
     const original = await Lead.findOne({ ref: body.replaces_ref, affiliate_id: req.affiliate._id });
     if (!original) return res.status(400).json({ error: `replaces_ref ${body.replaces_ref} not found` });
+    if (original.replaced_by_lead) {
+      return res.status(409).json({ error: `lead ${original.ref} already replaced` });
+    }
     lead.replaces_lead = original._id;
     original.replaced_by_lead = lead._id;
     original.history.push({ at: submitted_at, field: 'replaced_by_lead', from: null, to: lead.ref, source: 'api' });
