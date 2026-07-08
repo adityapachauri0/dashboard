@@ -11,6 +11,7 @@ function createApp() {
   app.get('/api/v1/health', (req, res) => res.json({ ok: true }));
   app.use('/api/v1', require('./routes/authRoutes'));
   app.use('/api/v1', require('./routes/affiliateRoutes'));
+  app.use('/api/v1', require('./routes/leadIngest'));
 
   // error handler — keep last; all routers mount above
   app.use((err, req, res, next) => {
