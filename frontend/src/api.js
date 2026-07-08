@@ -27,7 +27,10 @@ export async function api(path, { method = 'GET', body, formData } = {}) {
 
 export async function download(path, filename) {
   const user = getUser();
-  const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${user?.token}` } });
+  const headers = {};
+  if (user?.token) headers.Authorization = `Bearer ${user.token}`;
+  const res = await fetch(`${API}${path}`, { headers });
+  if (res.status === 401) { logout(); throw new Error('session expired'); }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const blob = await res.blob();
   const a = document.createElement('a');
