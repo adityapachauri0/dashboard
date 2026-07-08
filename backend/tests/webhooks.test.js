@@ -1,0 +1,73 @@
+const { test, before, after, beforeEach } = require('node:test');
+const assert = require('node:assert');
+const request = require('supertest');
+const bcrypt = require('bcryptjs');
+const { setupDB, teardownDB, clearDB } = require('./helpers');
+const { createApp } = require('../server');
+const User = require('../models/User');
+const Affiliate = require('../models/Affiliate');
+const Lead = require('../models/Lead');
+const WebhookEvent = require('../models/WebhookEvent');
+const { signToken } = require('../middleware/auth');
+
+before(setupDB);
+after(teardownDB);
+beforeEach(clearDB);
+
+const rates = { virgin_rate: 40, searched_upfront_rate: 15, searched_confirmation_rate: 25 };
+
+async function seedLead() {
+  const aff = await Affiliate.create({ name: 'A', lead_source: 'aaa', rate_card: rates });
+  const lead = await Lead.create({ ref: 'KB-2026-000001', affiliate_id: aff._id, lead_source: 'aaa', applicant_name: 'John', platform_ref: 'PLAT-77' });
+  return { aff, lead };
+}
+
+test('webhook matches by our ref and applies statuses', async () => {
+  await seedLead();
+  const res = await request(createApp())
+    .post('/api/v1/webhooks/platform')
+    .send({ ref: 'KB-2026-000001', status: 'accepted', credit_search: 'virgin' });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.matched, true);
+  const lead = await Lead.findOne({ ref: 'KB-2026-000001' });
+  assert.strictEqual(lead.initial_status, 'accepted');
+  assert.strictEqual(lead.payable_status, 'payable');
+  assert.strictEqual(lead.amounts.total_due, 40);
+  assert.ok(lead.history.every((h) => h.source === 'webhook'));
+});
+
+test('webhook matches by platform_ref; unmatched stored for review', async () => {
+  await seedLead();
+  const app = createApp();
+  const byPlat = await request(app).post('/api/v1/webhooks/platform').send({ platform_ref: 'PLAT-77', signature: 'signed' });
+  assert.strictEqual(byPlat.body.matched, true);
+  const nomatch = await request(app).post('/api/v1/webhooks/platform').send({ platform_ref: 'UNKNOWN-1', status: 'accepted' });
+  assert.strictEqual(nomatch.body.matched, false);
+  const events = await WebhookEvent.find({ matched_lead: null });
+  assert.strictEqual(events.length, 1);
+});
+
+test('webhook token enforced when configured', async () => {
+  process.env.WEBHOOK_TOKEN = 'sekret';
+  const res = await request(createApp()).post('/api/v1/webhooks/platform').send({ ref: 'x' });
+  assert.strictEqual(res.status, 401);
+  const ok = await request(createApp()).post('/api/v1/webhooks/platform?token=sekret').send({ ref: 'x' });
+  assert.strictEqual(ok.status, 200);
+  delete process.env.WEBHOOK_TOKEN;
+});
+
+test('admin can manually match an unmatched event', async () => {
+  const { lead } = await seedLead();
+  const admin = await User.create({ email: 'admin@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  const app = createApp();
+  await request(app).post('/api/v1/webhooks/platform').send({ platform_ref: 'UNKNOWN-9', status: 'rejected', reason: 'no credit file' });
+  const event = await WebhookEvent.findOne({ matched_lead: null });
+  const res = await request(app)
+    .post(`/api/v1/webhooks/${event._id}/match`)
+    .set('Authorization', `Bearer ${signToken(admin)}`)
+    .send({ ref: 'KB-2026-000001' });
+  assert.strictEqual(res.status, 200);
+  const updated = await Lead.findById(lead._id);
+  assert.strictEqual(updated.initial_status, 'rejected');
+  assert.strictEqual(updated.rejection_reason, 'no credit file');
+});
