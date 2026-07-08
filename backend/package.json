@@ -1,0 +1,25 @@
+{
+  "name": "pcp-affiliate-api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "csv-parse": "^5.5.6",
+    "csv-stringify": "^6.5.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.0",
+    "multer": "^1.4.5-lts.2"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^9.4.0",
+    "supertest": "^7.0.0"
+  }
+}
