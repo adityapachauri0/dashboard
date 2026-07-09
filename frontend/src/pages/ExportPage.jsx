@@ -3,6 +3,7 @@ import { Alert, Button, Card, Select, Stack, Title } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, download, getUser } from '../api';
+import { LABELS } from '../components/StatusBadge';
 
 const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') }));
 
@@ -61,7 +62,9 @@ export default function ExportPage() {
             onChange={setPresetPeriod} />
           <DatePickerInput type="range" label="Date range" value={range} onChange={(v) => { setPeriod(null); setRange(v); }} />
           <Select label="Lead status" placeholder="Any" clearable data={opts(['pending', 'accepted', 'rejected'])} value={initialStatus} onChange={setInitialStatus} />
-          <Select label="Payable status" placeholder="Any" clearable data={opts(['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'])} value={payableStatus} onChange={setPayableStatus} />
+          <Select label="Payment status" placeholder="Any" clearable
+            data={['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'].map((v) => ({ value: v, label: LABELS[v] || v }))}
+            value={payableStatus} onChange={setPayableStatus} />
           <Select label="Format" value={format} allowDeselect={false}
             data={[{ value: 'xlsx', label: 'Excel (.xlsx)' }, { value: 'csv', label: 'CSV (.csv)' }]}
             onChange={setFormat} />

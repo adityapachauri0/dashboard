@@ -6,7 +6,7 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, getUser } from '../api';
-import StatusBadge from '../components/StatusBadge';
+import StatusBadge, { LABELS } from '../components/StatusBadge';
 
 const PAGE_SIZE = 50;
 const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') }));
@@ -90,7 +90,9 @@ export default function Leads() {
         <Select placeholder="API status" clearable w={140} data={opts(['pending', 'accepted', 'rejected'])} value={filters.initial_status} onChange={set('initial_status')} />
         <Select placeholder="Search status" clearable w={150} data={opts(['virgin', 'searched', 'unknown'])} value={filters.search_status} onChange={set('search_status')} />
         <Select placeholder="Signature" clearable w={140} data={opts(['pending', 'passed', 'failed'])} value={filters.signature_status} onChange={set('signature_status')} />
-        <Select placeholder="Payment status" clearable w={200} data={opts(['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'])} value={filters.payable_status} onChange={set('payable_status')} />
+        <Select placeholder="Payment status" clearable w={230}
+          data={['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'].map((v) => ({ value: v, label: LABELS[v] || v }))}
+          value={filters.payable_status} onChange={set('payable_status')} />
         <DatePickerInput type="range" placeholder="Date range" clearable value={range} onChange={(v) => { setPage(1); setRange(v); }} w={240} />
         <TextInput placeholder="Search ref / name" value={qInput} onChange={(e) => setQInput(e.target.value)} w={180} />
       </Group>

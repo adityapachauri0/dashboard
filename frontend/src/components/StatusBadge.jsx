@@ -9,7 +9,7 @@ const COLORS = {
     payable_full: 'green', replaced: 'grape',
   },
 };
-const LABELS = {
+export const LABELS = {
   payable: 'payable (100%)',
   partial_pending_confirmation: 'part-paid — awaiting law firm',
   payable_full: 'payable in full',
