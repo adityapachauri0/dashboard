@@ -11,6 +11,20 @@ import StatusBadge from '../components/StatusBadge';
 const PAGE_SIZE = 50;
 const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') }));
 
+// What happens next for this lead, in plain English (mirrors the money flow:
+// virgin = 100% payable; searched = part-paid, rest on law firm confirmation)
+function nextUpdate(l) {
+  if (l.payable_status === 'replaced' || l.initial_status === 'rejected') return '—';
+  if (l.initial_status === 'pending') return 'Awaiting acceptance';
+  if (l.needs_replacement && !l.replaced_by_lead) return 'Replacement needed';
+  if (l.signature_status === 'pending') {
+    return `Signature check by ${l.signature_deadline ? dayjs(l.signature_deadline).format('DD MMM') : '—'}`;
+  }
+  if (l.payable_status === 'partial_pending_confirmation') return 'Awaiting law firm confirmation';
+  if (l.payable_status === 'payable' || l.payable_status === 'payable_full') return 'None — ready to pay';
+  return '—';
+}
+
 export default function Leads() {
   const user = getUser();
   const isAdmin = user.role === 'admin';
@@ -76,7 +90,7 @@ export default function Leads() {
         <Select placeholder="API status" clearable w={140} data={opts(['pending', 'accepted', 'rejected'])} value={filters.initial_status} onChange={set('initial_status')} />
         <Select placeholder="Search status" clearable w={150} data={opts(['virgin', 'searched', 'unknown'])} value={filters.search_status} onChange={set('search_status')} />
         <Select placeholder="Signature" clearable w={140} data={opts(['pending', 'passed', 'failed'])} value={filters.signature_status} onChange={set('signature_status')} />
-        <Select placeholder="Payable" clearable w={200} data={opts(['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'])} value={filters.payable_status} onChange={set('payable_status')} />
+        <Select placeholder="Payment status" clearable w={200} data={opts(['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'])} value={filters.payable_status} onChange={set('payable_status')} />
         <DatePickerInput type="range" placeholder="Date range" clearable value={range} onChange={(v) => { setPage(1); setRange(v); }} w={240} />
         <TextInput placeholder="Search ref / name" value={qInput} onChange={(e) => setQInput(e.target.value)} w={180} />
       </Group>
@@ -86,7 +100,7 @@ export default function Leads() {
           <Table.Tr>
             <Table.Th>Ref</Table.Th><Table.Th>Submitted</Table.Th><Table.Th>Affiliate</Table.Th>
             <Table.Th>Name</Table.Th><Table.Th>API status</Table.Th><Table.Th>Search</Table.Th>
-            <Table.Th>Signature</Table.Th><Table.Th>Payable</Table.Th><Table.Th>Due</Table.Th>
+            <Table.Th>Signature</Table.Th><Table.Th>Payment status</Table.Th><Table.Th>Next update</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -106,7 +120,7 @@ export default function Leads() {
                 {l.needs_replacement && !l.replaced_by_lead && <Badge color="red" ml={4}>needs replacement</Badge>}
               </Table.Td>
               <Table.Td><StatusBadge field="payable_status" value={l.payable_status} /></Table.Td>
-              <Table.Td>£{(l.amounts?.total_due || 0).toFixed(2)}</Table.Td>
+              <Table.Td><Text size="sm" c="dimmed">{nextUpdate(l)}</Text></Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

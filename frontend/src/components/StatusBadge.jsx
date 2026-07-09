@@ -10,8 +10,9 @@ const COLORS = {
   },
 };
 const LABELS = {
-  partial_pending_confirmation: 'pending confirmation',
-  payable_full: 'payable (full)',
+  payable: 'payable (100%)',
+  partial_pending_confirmation: 'part-paid — awaiting law firm',
+  payable_full: 'payable in full',
   not_payable: 'not payable',
   virgin: 'virgin search',
   searched: 'already searched',
