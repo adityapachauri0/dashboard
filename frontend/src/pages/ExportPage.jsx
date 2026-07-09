@@ -14,6 +14,7 @@ export default function ExportPage() {
   const [initialStatus, setInitialStatus] = useState(null);
   const [payableStatus, setPayableStatus] = useState(null);
   const [period, setPeriod] = useState(null);
+  const [format, setFormat] = useState('xlsx');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -38,7 +39,7 @@ export default function ExportPage() {
       if (range[1]) params.set('to', dayjs(range[1]).format('YYYY-MM-DD'));
       if (initialStatus) params.set('initial_status', initialStatus);
       if (payableStatus) params.set('payable_status', payableStatus);
-      await download(`/dashboard/export.csv?${params}`, `leads-export-${dayjs().format('YYYY-MM-DD')}.csv`);
+      await download(`/dashboard/export.${format}?${params}`, `leads-export-${dayjs().format('YYYY-MM-DD')}.${format}`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
@@ -61,7 +62,10 @@ export default function ExportPage() {
           <DatePickerInput type="range" label="Date range" value={range} onChange={(v) => { setPeriod(null); setRange(v); }} />
           <Select label="Lead status" placeholder="Any" clearable data={opts(['pending', 'accepted', 'rejected'])} value={initialStatus} onChange={setInitialStatus} />
           <Select label="Payable status" placeholder="Any" clearable data={opts(['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'])} value={payableStatus} onChange={setPayableStatus} />
-          <Button onClick={doExport} loading={busy}>Download CSV</Button>
+          <Select label="Format" value={format} allowDeselect={false}
+            data={[{ value: 'xlsx', label: 'Excel (.xlsx)' }, { value: 'csv', label: 'CSV (.csv)' }]}
+            onChange={setFormat} />
+          <Button onClick={doExport} loading={busy}>Download {format.toUpperCase()}</Button>
         </Stack>
       </Card>
     </>

@@ -1,5 +1,6 @@
 const express = require('express');
 const { stringify } = require('csv-stringify/sync');
+const ExcelJS = require('exceljs');
 const Lead = require('../models/Lead');
 const { requireAuth } = require('../middleware/auth');
 const { buildLeadFilter } = require('../services/leadFilter');
@@ -19,11 +20,11 @@ const COLUMNS = [
   'upfront_due', 'confirmation_due', 'total_due', 'platform_ref', 'last_updated',
 ];
 
-router.get('/dashboard/export.csv', requireAuth, async (req, res) => {
+async function fetchExportRows(req) {
   const filter = buildLeadFilter(req.query, req.user);
   const leads = await Lead.find(filter).sort({ submitted_at: -1 }).limit(50_000)
     .select('-payload -history').populate('affiliate_id', 'name').lean();
-  const rows = leads.map((l) => ({
+  return leads.map((l) => ({
     ref: l.ref,
     submitted_at: l.submitted_at?.toISOString() || '',
     affiliate: csvSafe(l.affiliate_id?.name),
@@ -43,11 +44,29 @@ router.get('/dashboard/export.csv', requireAuth, async (req, res) => {
     platform_ref: csvSafe(l.platform_ref),
     last_updated: l.last_updated?.toISOString() || '',
   }));
+}
+
+const stamp = () => new Date().toISOString().slice(0, 10);
+
+router.get('/dashboard/export.csv', requireAuth, async (req, res) => {
+  const rows = await fetchExportRows(req);
   const csv = stringify(rows, { header: true, columns: COLUMNS });
-  const stamp = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="leads-export-${stamp}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="leads-export-${stamp()}.csv"`);
   res.send(csv);
+});
+
+router.get('/dashboard/export.xlsx', requireAuth, async (req, res) => {
+  const rows = await fetchExportRows(req);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Leads');
+  ws.columns = COLUMNS.map((c) => ({ header: c, key: c, width: Math.max(12, c.length + 2) }));
+  ws.getRow(1).font = { bold: true };
+  rows.forEach((r) => ws.addRow(r));
+  const buffer = await wb.xlsx.writeBuffer();
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="leads-export-${stamp()}.xlsx"`);
+  res.send(Buffer.from(buffer));
 });
 
 module.exports = router;
