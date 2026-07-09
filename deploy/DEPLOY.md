@@ -1,6 +1,6 @@
 # Deploy runbook — pcp-affiliate-dashboard
 
-Target: VPS 31.97.57.193 (srv897225), port 5005, Mongo db `pcp-affiliates`.
+Target: VPS 31.97.57.193 (srv897225), port 5009 (5005 is taken by earnfromsurveys; local dev still defaults to 5005), Mongo db `pcp-affiliates`. Set `PORT=5009` in the server .env.
 
 ## First deploy
 1. `rsync -av --exclude node_modules --exclude .git ./ root@31.97.57.193:/var/www/pcp-affiliate-dashboard/`
@@ -15,7 +15,7 @@ Target: VPS 31.97.57.193 (srv897225), port 5005, Mongo db `pcp-affiliates`.
    symlink into sites-enabled, `nginx -t && systemctl reload nginx`.
 5. DNS: add `leads` A record → 31.97.57.193 in the click2leads.co.uk Cloudflare zone (proxied).
 6. TLS per VPS pattern (certbot DNS-01 / CF Origin cert).
-7. Update /var/www/PORT_MAP.md: 5005 = pcp-affiliate-api.
+7. PORT_MAP.md regenerates hourly via cron — verify 5009 = pcp-affiliate-api appears.
 
 ## Redeploy
 rsync → backend `npm install --omit=dev` (if package.json changed) → frontend `npm run build`
