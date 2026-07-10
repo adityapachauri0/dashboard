@@ -34,6 +34,12 @@ const leadSchema = new mongoose.Schema(
       default: 'not_payable',
     },
     needs_replacement: { type: Boolean, default: false },
+    // Duplicate detection: normalized contact identity + flag (flag-only — the
+    // lead is still accepted; an admin clears or acts on it from the dashboard)
+    contact_email: { type: String, index: true },
+    contact_phone: { type: String, index: true },
+    possible_duplicate: { type: Boolean, default: false },
+    duplicate_of_ref: String,
     replaces_lead: { type: mongoose.Schema.Types.ObjectId, ref: 'Lead' },
     replaced_by_lead: { type: mongoose.Schema.Types.ObjectId, ref: 'Lead' },
     amounts: {

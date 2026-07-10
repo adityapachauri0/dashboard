@@ -111,7 +111,10 @@ export default function Leads() {
               <Table.Td><Code>{l.ref}</Code></Table.Td>
               <Table.Td>{dayjs(l.submitted_at).format('DD MMM HH:mm')}</Table.Td>
               <Table.Td>{l.affiliate_id?.name}</Table.Td>
-              <Table.Td>{l.applicant_name}</Table.Td>
+              <Table.Td>
+                {l.applicant_name}
+                {l.possible_duplicate && <Badge color="orange" variant="outline" ml={4}>possible duplicate</Badge>}
+              </Table.Td>
               <Table.Td><StatusBadge field="initial_status" value={l.initial_status} /></Table.Td>
               <Table.Td><StatusBadge field="search_status" value={l.search_status} /></Table.Td>
               <Table.Td>
@@ -155,6 +158,11 @@ export default function Leads() {
             <Text size="sm">
               Submitted {dayjs(selected.submitted_at).format('DD MMM YYYY HH:mm')} · Signature deadline {selected.signature_deadline ? dayjs(selected.signature_deadline).format('DD MMM YYYY HH:mm') : '—'}
             </Text>
+            {selected.possible_duplicate && (
+              <Alert color="orange" p="xs">
+                Possible duplicate{selected.duplicate_of_ref ? <> of <Code>{selected.duplicate_of_ref}</Code></> : ''} — same phone/email seen in the last 30 days. Clear the flag below if it's a distinct claim.
+              </Alert>
+            )}
             {selected.rejection_reason && <Alert color="red" p="xs">Rejection: {selected.rejection_reason}</Alert>}
             {selected.replaces_lead && <Text size="sm">Replaces: <Code>{selected.replaces_lead.ref}</Code></Text>}
             {selected.replaced_by_lead && <Text size="sm">Replaced by: <Code>{selected.replaced_by_lead.ref}</Code></Text>}
@@ -175,6 +183,9 @@ export default function Leads() {
                 </Group>
                 <Group grow align="end">
                   <Switch label="Law firm confirmed" checked={edit.law_firm_confirmed ?? selected.law_firm_confirmed} onChange={(ev) => setEdit((e) => ({ ...e, law_firm_confirmed: ev.currentTarget.checked }))} />
+                  {selected.possible_duplicate && (
+                    <Switch label="Possible duplicate" checked={edit.possible_duplicate ?? selected.possible_duplicate} onChange={(ev) => setEdit((e) => ({ ...e, possible_duplicate: ev.currentTarget.checked }))} />
+                  )}
                   <TextInput label="Replaces ref (link as replacement)" placeholder="KB-2026-000001" value={edit.replaces_ref || ''} onChange={(ev) => setEdit((e) => ({ ...e, replaces_ref: ev.target.value }))} />
                 </Group>
                 <Button onClick={saveEdit} loading={saving} disabled={!Object.keys(edit).length}>Save changes</Button>

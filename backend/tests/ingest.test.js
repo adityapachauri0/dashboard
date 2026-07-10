@@ -94,3 +94,47 @@ test('replaces_ref links replacement and zeroes the original', async () => {
   assert.strictEqual(updatedOrig.replaced_by_lead.toString(), replacement._id.toString());
   assert.strictEqual(replacement.replaces_lead.toString(), updatedOrig._id.toString());
 });
+
+test('duplicate phone/email within 30 days is flagged, not rejected', async () => {
+  const { key } = await makeAffiliate();
+  const { key: key2 } = await makeAffiliate('other');
+  const app = createApp();
+  const first = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'Jane', last_name: 'Doe', email: 'jane@x.com', phone: '+44 7700 900123' });
+  assert.strictEqual(first.status, 201);
+  const firstLead = await Lead.findOne({ ref: first.body.ref });
+  assert.strictEqual(firstLead.possible_duplicate, false);
+  assert.strictEqual(firstLead.contact_phone, '07700900123');
+  // same phone (different formatting), different email, DIFFERENT affiliate -> flagged
+  const dup = await request(app).post('/api/v1/leads').set('X-API-Key', key2)
+    .send({ first_name: 'Jane', last_name: 'D', email: 'other@x.com', phone: '07700 900123' });
+  assert.strictEqual(dup.status, 201); // accepted, never bounced
+  const dupLead = await Lead.findOne({ ref: dup.body.ref });
+  assert.strictEqual(dupLead.possible_duplicate, true);
+  assert.strictEqual(dupLead.duplicate_of_ref, first.body.ref);
+  // distinct contact -> not flagged
+  const clean = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'Bob', last_name: 'New', email: 'bob@x.com', phone: '07700900999' });
+  const cleanLead = await Lead.findOne({ ref: clean.body.ref });
+  assert.strictEqual(cleanLead.possible_duplicate, false);
+});
+
+test('duplicate outside 30-day window is not flagged; replacements exempt', async () => {
+  const { key } = await makeAffiliate();
+  const app = createApp();
+  const first = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'Old', last_name: 'One', email: 'same@x.com' });
+  await Lead.updateOne({ ref: first.body.ref }, { submitted_at: new Date(Date.now() - 31 * 86400000) });
+  const second = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'New', last_name: 'One', email: 'same@x.com' });
+  const secondLead = await Lead.findOne({ ref: second.body.ref });
+  assert.strictEqual(secondLead.possible_duplicate, false);
+  // replacement re-submits the same applicant by design -> exempt from the check
+  const orig = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'Rep', last_name: 'Base', email: 'rep@x.com' });
+  const repl = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'Rep', last_name: 'Base', email: 'rep@x.com', replaces_ref: orig.body.ref });
+  assert.strictEqual(repl.status, 201);
+  const replLead = await Lead.findOne({ ref: repl.body.ref });
+  assert.strictEqual(replLead.possible_duplicate, false);
+});

@@ -70,12 +70,13 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
             $sum: { $cond: [{ $and: [{ $eq: ['$needs_replacement', true] }, { $not: ['$replaced_by_lead'] }] }, 1, 0] },
           },
           awaiting_confirmation: { $sum: is('payable_status', 'partial_pending_confirmation') },
+          possible_duplicates: { $sum: { $cond: [{ $eq: ['$possible_duplicate', true] }, 1, 0] } },
         },
       },
     ]),
   ]);
   const s = g || { submitted: 0, accepted: 0, rejected: 0, pending: 0, awaiting_signature: 0, awaiting_confirmation: 0, total_due: 0 };
-  const at = a || { overdue_signature: 0, needs_replacement: 0, awaiting_confirmation: 0 };
+  const at = a || { overdue_signature: 0, needs_replacement: 0, awaiting_confirmation: 0, possible_duplicates: 0 };
   res.json({
     submitted: s.submitted,
     accepted: s.accepted,
@@ -90,6 +91,7 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
       overdue_signature: at.overdue_signature,
       needs_replacement: at.needs_replacement,
       awaiting_confirmation: at.awaiting_confirmation,
+      possible_duplicates: at.possible_duplicates,
     },
   });
 });

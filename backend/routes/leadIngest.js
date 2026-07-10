@@ -5,6 +5,9 @@ const { nextLeadRef } = require('../models/Counter');
 const { apiKeyAuth } = require('../middleware/apiKey');
 const { applyStatusChanges } = require('../services/statusService');
 const { submitLead } = require('../services/platformAdapter');
+const { normalizeEmail, normalizePhone } = require('../services/normalize');
+
+const DUP_WINDOW_DAYS = 30;
 
 const router = express.Router();
 const ingestLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true });
@@ -29,12 +32,34 @@ router.post('/leads', ingestLimiter, apiKeyAuth, async (req, res) => {
     signature_deadline: new Date(submitted_at.getTime() + 48 * 3600 * 1000),
     applicant_name,
     payload: body,
+    contact_email: normalizeEmail(body.email),
+    contact_phone: normalizePhone(body.phone),
   });
 
   try {
     await lead.validate();
   } catch (e) {
     return res.status(400).json({ error: e.message });
+  }
+
+  // Flag possible duplicates: same normalized email or phone within the window,
+  // across ALL affiliates. Replacements are exempt — they intentionally
+  // re-submit the same applicant.
+  if (!body.replaces_ref) {
+    const identity = [];
+    if (lead.contact_email) identity.push({ contact_email: lead.contact_email });
+    if (lead.contact_phone) identity.push({ contact_phone: lead.contact_phone });
+    if (identity.length) {
+      const dup = await Lead.findOne({
+        $or: identity,
+        submitted_at: { $gte: new Date(submitted_at.getTime() - DUP_WINDOW_DAYS * 86400000) },
+      }).sort({ submitted_at: -1 }).select('ref').lean();
+      if (dup) {
+        lead.possible_duplicate = true;
+        lead.duplicate_of_ref = dup.ref;
+        lead.history.push({ at: submitted_at, field: 'possible_duplicate', from: false, to: true, source: 'api' });
+      }
+    }
   }
 
   // Replacement for a signature-failed lead: link both ways, zero the original.

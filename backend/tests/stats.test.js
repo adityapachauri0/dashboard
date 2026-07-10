@@ -61,6 +61,7 @@ test('summary attention block is all-time: overdue signatures, unresolved replac
     overdue_signature: 1, // seed lead 1 has signature pending but NO deadline → excluded
     needs_replacement: 1,
     awaiting_confirmation: 1, // seed lead 3, counted all-time
+    possible_duplicates: 0,
   });
 });
 

@@ -7,6 +7,7 @@ const UPDATABLE_FIELDS = [
   'signature_status',
   'law_firm_confirmed',
   'platform_ref',
+  'possible_duplicate', // manual clear/set from the dashboard only
 ];
 
 // Single choke-point for every status mutation (api/webhook/import/manual):

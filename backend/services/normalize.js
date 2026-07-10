@@ -51,4 +51,15 @@ function canonicalFromPayload(p) {
   return out;
 }
 
-module.exports = { normalizeField, canonicalFromPayload };
+// Contact identity for duplicate detection. Returns '' when unusable.
+function normalizeEmail(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  return /\S+@\S+\.\S+/.test(s) ? s : '';
+}
+function normalizePhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('44')) d = '0' + d.slice(2); // +44 7… → 07…
+  return d.length >= 10 ? d : '';
+}
+
+module.exports = { normalizeField, canonicalFromPayload, normalizeEmail, normalizePhone };

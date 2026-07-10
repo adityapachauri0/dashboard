@@ -38,12 +38,13 @@ export default function Summary() {
         <DatePickerInput type="range" value={range} onChange={setRange} allowSingleDateInRange w={280} />
       </Group>
       {error && <Alert color="red" mb="md">{error}</Alert>}
-      {summary?.attention && (summary.attention.overdue_signature + summary.attention.needs_replacement + summary.attention.awaiting_confirmation) > 0 && (
+      {summary?.attention && (summary.attention.overdue_signature + summary.attention.needs_replacement + summary.attention.awaiting_confirmation + (summary.attention.possible_duplicates || 0)) > 0 && (
         <Alert color="yellow" mb="md" title="Needs attention">
           {[
             summary.attention.overdue_signature > 0 && `${summary.attention.overdue_signature} signature check${summary.attention.overdue_signature === 1 ? '' : 's'} overdue`,
             summary.attention.needs_replacement > 0 && `${summary.attention.needs_replacement} replacement${summary.attention.needs_replacement === 1 ? '' : 's'} needed`,
             summary.attention.awaiting_confirmation > 0 && `${summary.attention.awaiting_confirmation} part-paid — awaiting law firm`,
+            summary.attention.possible_duplicates > 0 && `${summary.attention.possible_duplicates} possible duplicate${summary.attention.possible_duplicates === 1 ? '' : 's'}`,
           ].filter(Boolean).join(' · ')}
         </Alert>
       )}
