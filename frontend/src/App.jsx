@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink as RouterNavLink, useLocation } from 'react-router-dom';
-import { AppShell, NavLink, Group, Title, Button, Text } from '@mantine/core';
+import { AppShell, NavLink, Group, Button, Text, Box } from '@mantine/core';
+import { IconLayoutDashboard, IconUsers, IconAffiliate, IconFileImport, IconFileExport } from '@tabler/icons-react';
 import { getUser, logout } from './api';
 import Login from './pages/Login';
 import Summary from './pages/Summary';
@@ -7,6 +8,14 @@ import Leads from './pages/Leads';
 import Affiliates from './pages/Affiliates';
 import Imports from './pages/Imports';
 import ExportPage from './pages/ExportPage';
+
+const ICONS = {
+  '/': IconLayoutDashboard,
+  '/leads': IconUsers,
+  '/affiliates': IconAffiliate,
+  '/imports': IconFileImport,
+  '/export': IconFileExport,
+};
 
 function Shell({ children }) {
   const user = getUser();
@@ -20,20 +29,23 @@ function Shell({ children }) {
     { to: '/export', label: 'Export' },
   ];
   return (
-    <AppShell header={{ height: 56 }} navbar={{ width: 200, breakpoint: 'sm' }} padding="md">
-      <AppShell.Header>
-        <Group justify="space-between" h="100%" px="md">
-          <Title order={4}>PCP Affiliate Dashboard</Title>
-          <Group gap="sm">
-            <Text size="sm" c="dimmed">{user.email}</Text>
-            <Button size="xs" variant="default" onClick={logout}>Log out</Button>
-          </Group>
+    <AppShell navbar={{ width: 240, breakpoint: 'sm' }} padding="lg">
+      <AppShell.Navbar p="sm" className="sidebar">
+        <Text className="sidebar-brand">PCP Affiliate Dashboard</Text>
+        <Box style={{ flex: 1 }}>
+          {links.map((l) => {
+            const Icon = ICONS[l.to];
+            return (
+              <NavLink key={l.to} component={RouterNavLink} to={l.to} label={l.label}
+                leftSection={Icon ? <Icon size={18} stroke={1.75} /> : undefined}
+                active={location.pathname === l.to} />
+            );
+          })}
+        </Box>
+        <Group className="sidebar-footer" justify="space-between" gap="sm" wrap="nowrap">
+          <Text size="sm" truncate>{user.email}</Text>
+          <Button size="xs" variant="default" className="sidebar-logout" style={{ flex: 'none' }} onClick={logout}>Log out</Button>
         </Group>
-      </AppShell.Header>
-      <AppShell.Navbar p="xs">
-        {links.map((l) => (
-          <NavLink key={l.to} component={RouterNavLink} to={l.to} label={l.label} active={location.pathname === l.to} />
-        ))}
       </AppShell.Navbar>
       <AppShell.Main>{children}</AppShell.Main>
     </AppShell>

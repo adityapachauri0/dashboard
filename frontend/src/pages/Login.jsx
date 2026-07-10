@@ -24,8 +24,8 @@ export default function Login() {
   }
 
   return (
-    <Center h="100vh">
-      <Card withBorder w={360} p="lg">
+    <Center h="100vh" style={{ background: '#0f172a' }}>
+      <Card w={380} p="lg" shadow="xl">
         <Title order={3} mb="md">PCP Affiliate Dashboard</Title>
         {error && <Alert color="red" mb="sm">{error}</Alert>}
         <form onSubmit={submit}>

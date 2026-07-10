@@ -4,11 +4,11 @@ import { DatePickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, getUser } from '../api';
 
-function Stat({ label, value, suffix = '' }) {
+function Stat({ label, value, suffix = '', accent = 'var(--mantine-color-emerald-5)' }) {
   return (
-    <Card withBorder p="md">
+    <Card withBorder p="md" style={{ borderLeft: `3px solid ${accent}` }}>
       <Text size="xs" c="dimmed" tt="uppercase">{label}</Text>
-      <Text size="xl" fw={700}>{value}{suffix}</Text>
+      <Text fz={24} fw={700}>{value}{suffix}</Text>
     </Card>
   );
 }
@@ -41,12 +41,12 @@ export default function Summary() {
       {summary && (
         <SimpleGrid cols={{ base: 2, md: 4 }} mb="lg">
           <Stat label="Submitted" value={summary.submitted} />
-          <Stat label="Accepted" value={summary.accepted} />
-          <Stat label="Rejected" value={summary.rejected} />
-          <Stat label="Pending" value={summary.pending} />
+          <Stat label="Accepted" value={summary.accepted} accent="var(--mantine-color-green-6)" />
+          <Stat label="Rejected" value={summary.rejected} accent="var(--mantine-color-red-6)" />
+          <Stat label="Pending" value={summary.pending} accent="var(--mantine-color-yellow-6)" />
           <Stat label="Acceptance rate" value={summary.acceptance_rate} suffix="%" />
-          <Stat label="Awaiting signature" value={summary.awaiting_signature} />
-          <Stat label="Awaiting confirmation" value={summary.awaiting_confirmation} />
+          <Stat label="Awaiting signature" value={summary.awaiting_signature} accent="var(--mantine-color-teal-6)" />
+          <Stat label="Awaiting confirmation" value={summary.awaiting_confirmation} accent="var(--mantine-color-indigo-6)" />
           <Stat label="Total due" value={`£${(summary.total_due || 0).toFixed(2)}`} />
         </SimpleGrid>
       )}
