@@ -13,10 +13,17 @@ async function main() {
   await connectDB();
   await User.findOneAndUpdate(
     { email: email.toLowerCase() },
-    { email: email.toLowerCase(), password_hash: bcrypt.hashSync(password, 10), role: 'admin' },
+    {
+      email: email.toLowerCase(),
+      password_hash: bcrypt.hashSync(password, 10),
+      role: 'admin',
+      // reset 2FA — re-running this script is the lockout recovery path
+      totp_secret: null,
+      totp_enabled: false,
+    },
     { upsert: true }
   );
-  console.log(`Admin ${email} ready`);
+  console.log(`Admin ${email} ready (2FA reset — next login re-enrols)`);
   process.exit(0);
 }
 main();
