@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Select, Stack, Title } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
+import { Alert, Button, Card, Select, Stack, Text, Title } from '@mantine/core';
+import { DatePickerInput, MonthPickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, download, getUser } from '../api';
 import { LABELS } from '../components/StatusBadge';
@@ -18,6 +18,9 @@ export default function ExportPage() {
   const [format, setFormat] = useState('xlsx');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [stmtAffiliate, setStmtAffiliate] = useState(null);
+  const [stmtMonth, setStmtMonth] = useState(dayjs().subtract(1, 'month').startOf('month').toDate());
+  const [stmtBusy, setStmtBusy] = useState(false);
 
   useEffect(() => {
     if (user.role === 'admin') api('/affiliates').then(setAffiliates).catch(() => {});
@@ -69,6 +72,30 @@ export default function ExportPage() {
             data={[{ value: 'xlsx', label: 'Excel (.xlsx)' }, { value: 'csv', label: 'CSV (.csv)' }]}
             onChange={setFormat} />
           <Button onClick={doExport} loading={busy}>Download {format.toUpperCase()}</Button>
+        </Stack>
+      </Card>
+
+      <Title order={4} mt="lg" mb="sm">Monthly statement</Title>
+      <Card withBorder maw={480}>
+        <Stack>
+          <Text size="sm" c="dimmed">One affiliate, one calendar month, with totals — what the affiliate invoices against.</Text>
+          {user.role === 'admin' && (
+            <Select label="Affiliate" placeholder="Choose affiliate" value={stmtAffiliate}
+              data={affiliates.map((a) => ({ value: a._id, label: a.name }))} onChange={setStmtAffiliate} />
+          )}
+          <MonthPickerInput label="Month" value={stmtMonth} onChange={setStmtMonth} maxDate={new Date()} />
+          <Button loading={stmtBusy} disabled={(user.role === 'admin' && !stmtAffiliate) || !stmtMonth}
+            onClick={async () => {
+              setStmtBusy(true); setError(null);
+              try {
+                const month = dayjs(stmtMonth).format('YYYY-MM');
+                const params = new URLSearchParams({ month });
+                if (stmtAffiliate) params.set('affiliate_id', stmtAffiliate);
+                await download(`/dashboard/statement.xlsx?${params}`, `statement-${month}.xlsx`);
+              } catch (e) { setError(e.message); } finally { setStmtBusy(false); }
+            }}>
+            Download statement
+          </Button>
         </Stack>
       </Card>
     </>

@@ -70,3 +70,44 @@ test('xlsx export returns a valid workbook with scoping', async () => {
   assert.strictEqual(ws.getCell('A2').value, 'KB-2026-000011');
   assert.strictEqual(ws.actualRowCount, 2); // header + own lead only (scoped)
 });
+
+test('statement.xlsx scopes to affiliate+month, requires params, pins affiliate users', async () => {
+  const ExcelJS = require('exceljs');
+  const affA = await Affiliate.create({ name: 'A', lead_source: 'aaa' });
+  const affB = await Affiliate.create({ name: 'B', lead_source: 'bbb' });
+  const admin = await User.create({ email: 'adm2@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  const affUser = await User.create({ email: 'a2@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'affiliate', affiliate_id: affA._id });
+  await Lead.create({ ref: 'KB-2026-000011', affiliate_id: affA._id, submitted_at: new Date('2026-06-10T10:00:00Z'), applicant_name: 'In', initial_status: 'accepted', amounts: { upfront_due: 40, confirmation_due: 0, total_due: 40 } });
+  await Lead.create({ ref: 'KB-2026-000012', affiliate_id: affA._id, submitted_at: new Date('2026-07-01T10:00:00Z'), applicant_name: 'OtherMonth', amounts: { upfront_due: 15, confirmation_due: 0, total_due: 15 } });
+  await Lead.create({ ref: 'KB-2026-000013', affiliate_id: affB._id, submitted_at: new Date('2026-06-11T10:00:00Z'), applicant_name: 'OtherAff', amounts: { upfront_due: 25, confirmation_due: 0, total_due: 25 } });
+  const app = createApp();
+
+  // admin without affiliate_id / bad month -> 400
+  assert.strictEqual((await request(app).get('/api/v1/dashboard/statement.xlsx?month=2026-06').set('Authorization', `Bearer ${signToken(admin)}`)).status, 400);
+  assert.strictEqual((await request(app).get(`/api/v1/dashboard/statement.xlsx?affiliate_id=${affA._id}&month=junk`).set('Authorization', `Bearer ${signToken(admin)}`)).status, 400);
+
+  const res = await request(app)
+    .get(`/api/v1/dashboard/statement.xlsx?affiliate_id=${affA._id}&month=2026-06`)
+    .set('Authorization', `Bearer ${signToken(admin)}`)
+    .buffer(true).parse((r, cb) => { const chunks = []; r.on('data', (c) => chunks.push(c)); r.on('end', () => cb(null, Buffer.concat(chunks))); });
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers['content-disposition'], /statement-aaa-2026-06\.xlsx/);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(res.body);
+  const ws = wb.getWorksheet('Statement');
+  const cells = [];
+  ws.eachRow((row) => row.eachCell((c) => cells.push(String(c.value))));
+  assert.ok(cells.includes('KB-2026-000011'));
+  assert.ok(!cells.includes('KB-2026-000012')); // other month excluded
+  assert.ok(!cells.includes('KB-2026-000013')); // other affiliate excluded
+  assert.ok(cells.includes('TOTALS'));
+  assert.ok(cells.includes('1 lead'));
+
+  // affiliate user is pinned to their own affiliate even if they ask for B's
+  const pinned = await request(app)
+    .get(`/api/v1/dashboard/statement.xlsx?affiliate_id=${affB._id}&month=2026-06`)
+    .set('Authorization', `Bearer ${signToken(affUser)}`)
+    .buffer(true).parse((r, cb) => { const chunks = []; r.on('data', (c) => chunks.push(c)); r.on('end', () => cb(null, Buffer.concat(chunks))); });
+  assert.strictEqual(pinned.status, 200);
+  assert.match(pinned.headers['content-disposition'], /statement-aaa-2026-06\.xlsx/);
+});
