@@ -2,6 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { authenticator } = require('otplib');
+// accept the previous/next 30s step too — tolerates typing time and clock skew
+authenticator.options = { window: 1 };
 const User = require('../models/User');
 const { signToken } = require('../middleware/auth');
 
