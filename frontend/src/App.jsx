@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink as RouterNavLink, useLocation } from 'react-router-dom';
 import { AppShell, NavLink, Group, Button, Text, Box } from '@mantine/core';
-import { IconLayoutDashboard, IconUsers, IconAffiliate, IconFileImport, IconFileExport } from '@tabler/icons-react';
+import { IconLayoutDashboard, IconUsers, IconAffiliate, IconFileImport, IconFileExport, IconCode } from '@tabler/icons-react';
 import { getUser, logout } from './api';
 import Login from './pages/Login';
 import Summary from './pages/Summary';
@@ -8,6 +8,7 @@ import Leads from './pages/Leads';
 import Affiliates from './pages/Affiliates';
 import Imports from './pages/Imports';
 import ExportPage from './pages/ExportPage';
+import ApiDocs from './pages/ApiDocs';
 
 const ICONS = {
   '/': IconLayoutDashboard,
@@ -15,6 +16,7 @@ const ICONS = {
   '/affiliates': IconAffiliate,
   '/imports': IconFileImport,
   '/export': IconFileExport,
+  '/docs': IconCode,
 };
 
 function Shell({ children }) {
@@ -27,6 +29,7 @@ function Shell({ children }) {
       ? [{ to: '/affiliates', label: 'Affiliates' }, { to: '/imports', label: 'Imports' }]
       : []),
     { to: '/export', label: 'Export' },
+    { to: '/docs', label: 'API docs' },
   ];
   return (
     <AppShell navbar={{ width: 240, breakpoint: 'sm' }} padding="lg">
@@ -66,6 +69,7 @@ export default function App() {
         <Route path="/affiliates" element={<RequireAuth><Affiliates /></RequireAuth>} />
         <Route path="/imports" element={<RequireAuth><Imports /></RequireAuth>} />
         <Route path="/export" element={<RequireAuth><ExportPage /></RequireAuth>} />
+        <Route path="/docs" element={<RequireAuth><ApiDocs /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
