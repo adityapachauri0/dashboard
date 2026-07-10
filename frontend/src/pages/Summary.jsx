@@ -15,7 +15,7 @@ function Stat({ label, value, suffix = '', accent = 'var(--mantine-color-emerald
 
 export default function Summary() {
   const user = getUser();
-  const [range, setRange] = useState([new Date(), new Date()]);
+  const [range, setRange] = useState([dayjs().subtract(29, 'day').toDate(), new Date()]);
   const [summary, setSummary] = useState(null);
   const [breakdown, setBreakdown] = useState([]);
   const [error, setError] = useState(null);
@@ -38,6 +38,15 @@ export default function Summary() {
         <DatePickerInput type="range" value={range} onChange={setRange} allowSingleDateInRange w={280} />
       </Group>
       {error && <Alert color="red" mb="md">{error}</Alert>}
+      {summary?.attention && (summary.attention.overdue_signature + summary.attention.needs_replacement + summary.attention.awaiting_confirmation) > 0 && (
+        <Alert color="yellow" mb="md" title="Needs attention">
+          {[
+            summary.attention.overdue_signature > 0 && `${summary.attention.overdue_signature} signature check${summary.attention.overdue_signature === 1 ? '' : 's'} overdue`,
+            summary.attention.needs_replacement > 0 && `${summary.attention.needs_replacement} replacement${summary.attention.needs_replacement === 1 ? '' : 's'} needed`,
+            summary.attention.awaiting_confirmation > 0 && `${summary.attention.awaiting_confirmation} part-paid — awaiting law firm`,
+          ].filter(Boolean).join(' · ')}
+        </Alert>
+      )}
       {summary && (
         <SimpleGrid cols={{ base: 2, md: 4 }} mb="lg">
           <Stat label="Submitted" value={summary.submitted} />
@@ -71,6 +80,9 @@ export default function Summary() {
           ))}
         </Table.Tbody>
       </Table>
+      {breakdown.length === 0 && (
+        <Text c="dimmed" size="sm" mt="sm">No leads in this range — try widening the date filter.</Text>
+      )}
     </>
   );
 }

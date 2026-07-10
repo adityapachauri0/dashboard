@@ -127,6 +127,13 @@ export default function Leads() {
           ))}
         </Table.Tbody>
       </Table>
+      {data.total === 0 && (
+        <Text c="dimmed" size="sm" mt="sm">
+          {Object.values(filters).some(Boolean) || range[0]
+            ? 'No leads match — try clearing filters or widening the date range.'
+            : 'No leads yet.'}
+        </Text>
+      )}
       <Group justify="space-between" mt="sm">
         <Text size="sm" c="dimmed">{data.total} leads</Text>
         <Pagination value={page} onChange={setPage} total={Math.max(1, Math.ceil(data.total / PAGE_SIZE))} />

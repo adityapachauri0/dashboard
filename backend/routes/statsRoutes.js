@@ -20,29 +20,62 @@ function dateRange(query) {
 router.get('/dashboard/summary', requireAuth, async (req, res) => {
   const range = dateRange(req.query);
   const match = buildLeadFilter({ ...req.query, ...range }, req.user);
-  const [g] = await Lead.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: null,
-        submitted: { $sum: 1 },
-        accepted: { $sum: is('initial_status', 'accepted') },
-        rejected: { $sum: is('initial_status', 'rejected') },
-        pending: { $sum: is('initial_status', 'pending') },
-        awaiting_signature: {
-          $sum: {
-            $cond: [
-              { $and: [{ $eq: ['$initial_status', 'accepted'] }, { $eq: ['$signature_status', 'pending'] }] },
-              1, 0,
-            ],
+  // "Needs attention" is all-time (an overdue signature from last month still needs
+  // acting on), scoped to the user / selected affiliate but NOT the date range.
+  const attentionMatch = buildLeadFilter({ affiliate_id: req.query.affiliate_id }, req.user);
+  const [[g], [a]] = await Promise.all([
+    Lead.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          submitted: { $sum: 1 },
+          accepted: { $sum: is('initial_status', 'accepted') },
+          rejected: { $sum: is('initial_status', 'rejected') },
+          pending: { $sum: is('initial_status', 'pending') },
+          awaiting_signature: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ['$initial_status', 'accepted'] }, { $eq: ['$signature_status', 'pending'] }] },
+                1, 0,
+              ],
+            },
           },
+          awaiting_confirmation: { $sum: is('payable_status', 'partial_pending_confirmation') },
+          total_due: { $sum: '$amounts.total_due' },
         },
-        awaiting_confirmation: { $sum: is('payable_status', 'partial_pending_confirmation') },
-        total_due: { $sum: '$amounts.total_due' },
       },
-    },
+    ]),
+    Lead.aggregate([
+      { $match: attentionMatch },
+      {
+        $group: {
+          _id: null,
+          overdue_signature: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$initial_status', 'accepted'] },
+                    { $eq: ['$signature_status', 'pending'] },
+                    { $eq: [{ $type: '$signature_deadline' }, 'date'] },
+                    { $lt: ['$signature_deadline', '$$NOW'] },
+                  ],
+                },
+                1, 0,
+              ],
+            },
+          },
+          needs_replacement: {
+            $sum: { $cond: [{ $and: [{ $eq: ['$needs_replacement', true] }, { $not: ['$replaced_by_lead'] }] }, 1, 0] },
+          },
+          awaiting_confirmation: { $sum: is('payable_status', 'partial_pending_confirmation') },
+        },
+      },
+    ]),
   ]);
   const s = g || { submitted: 0, accepted: 0, rejected: 0, pending: 0, awaiting_signature: 0, awaiting_confirmation: 0, total_due: 0 };
+  const at = a || { overdue_signature: 0, needs_replacement: 0, awaiting_confirmation: 0 };
   res.json({
     submitted: s.submitted,
     accepted: s.accepted,
@@ -53,6 +86,11 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
     awaiting_signature: s.awaiting_signature,
     awaiting_confirmation: s.awaiting_confirmation,
     total_due: s.total_due,
+    attention: {
+      overdue_signature: at.overdue_signature,
+      needs_replacement: at.needs_replacement,
+      awaiting_confirmation: at.awaiting_confirmation,
+    },
   });
 });
 

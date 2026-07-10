@@ -42,6 +42,28 @@ test('summary counts and rates for admin', async () => {
   assert.strictEqual(res.body.total_due, 55);
 });
 
+test('summary attention block is all-time: overdue signatures, unresolved replacements, part-paid', async () => {
+  const { admin } = await seed();
+  const affC = await Affiliate.create({ name: 'C', lead_source: 'ccc' });
+  const june = new Date('2026-06-01T10:00:00Z');
+  // outside the queried range, deadline in the past → overdue
+  await Lead.create({ ref: 'KB-2026-000005', affiliate_id: affC._id, submitted_at: june, initial_status: 'accepted', signature_status: 'pending', signature_deadline: new Date('2026-06-05T17:00:00Z') });
+  // deadline in the future → not overdue
+  await Lead.create({ ref: 'KB-2026-000006', affiliate_id: affC._id, submitted_at: june, initial_status: 'accepted', signature_status: 'pending', signature_deadline: new Date('2099-01-01T17:00:00Z') });
+  // failed signature, replacement not yet linked → needs replacement
+  await Lead.create({ ref: 'KB-2026-000007', affiliate_id: affC._id, submitted_at: june, initial_status: 'accepted', signature_status: 'failed', needs_replacement: true });
+  const res = await request(createApp())
+    .get('/api/v1/dashboard/summary?from=2026-07-05&to=2026-07-05')
+    .set('Authorization', `Bearer ${signToken(admin)}`);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.submitted, 4); // range-scoped fields unaffected by June leads
+  assert.deepStrictEqual(res.body.attention, {
+    overdue_signature: 1, // seed lead 1 has signature pending but NO deadline → excluded
+    needs_replacement: 1,
+    awaiting_confirmation: 1, // seed lead 3, counted all-time
+  });
+});
+
 test('breakdown groups by affiliate; affiliate user sees only own row', async () => {
   const { admin, affUser } = await seed();
   const app = createApp();
