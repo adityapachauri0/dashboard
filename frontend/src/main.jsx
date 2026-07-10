@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { MantineProvider, createTheme, Card } from '@mantine/core';
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
+import '@mantine/charts/styles.css';
 import './theme.css';
 import dayjs from 'dayjs';
 import 'dayjs/locale/en-gb';

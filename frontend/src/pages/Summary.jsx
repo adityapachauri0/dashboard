@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Card, Group, SimpleGrid, Table, Text, Title, Alert } from '@mantine/core';
+import { LineChart } from '@mantine/charts';
 import { DatePickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, getUser } from '../api';
+
+// zero-fill missing days so the chart doesn't skip quiet dates
+function fillDays(rows, from, to) {
+  const byDate = new Map(rows.map((r) => [r.date, r]));
+  const out = [];
+  for (let d = dayjs(from); !d.isAfter(dayjs(to), 'day'); d = d.add(1, 'day')) {
+    const key = d.format('YYYY-MM-DD');
+    out.push({ date: d.format('D MMM'), submitted: 0, accepted: 0, ...(byDate.get(key) ? { submitted: byDate.get(key).submitted, accepted: byDate.get(key).accepted } : {}) });
+  }
+  return out;
+}
 
 function Stat({ label, value, suffix = '', accent = 'var(--mantine-color-emerald-5)' }) {
   return (
@@ -18,6 +30,7 @@ export default function Summary() {
   const [range, setRange] = useState([dayjs().subtract(29, 'day').toDate(), new Date()]);
   const [summary, setSummary] = useState(null);
   const [breakdown, setBreakdown] = useState([]);
+  const [daily, setDaily] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -25,8 +38,8 @@ export default function Summary() {
     if (!from || !to) return;
     let stale = false;
     const qs = `?from=${dayjs(from).format('YYYY-MM-DD')}&to=${dayjs(to).format('YYYY-MM-DD')}`;
-    Promise.all([api(`/dashboard/summary${qs}`), api(`/dashboard/affiliate-breakdown${qs}`)])
-      .then(([s, b]) => { if (!stale) { setSummary(s); setBreakdown(b); setError(null); } })
+    Promise.all([api(`/dashboard/summary${qs}`), api(`/dashboard/affiliate-breakdown${qs}`), api(`/dashboard/daily${qs}`)])
+      .then(([s, b, d]) => { if (!stale) { setSummary(s); setBreakdown(b); setDaily(fillDays(d, from, to)); setError(null); } })
       .catch((e) => { if (!stale) setError(e.message); });
     return () => { stale = true; };
   }, [range]);
@@ -59,6 +72,16 @@ export default function Summary() {
           <Stat label="Awaiting confirmation" value={summary.awaiting_confirmation} accent="var(--mantine-color-indigo-6)" />
           <Stat label="Total due" value={`£${(summary.total_due || 0).toFixed(2)}`} />
         </SimpleGrid>
+      )}
+      {daily.length > 1 && (
+        <Card withBorder p="md" mb="lg">
+          <Text size="xs" c="dimmed" tt="uppercase" mb="xs">Leads per day</Text>
+          <LineChart h={200} data={daily} dataKey="date" withLegend curveType="monotone"
+            series={[
+              { name: 'submitted', color: '#228be6' },
+              { name: 'accepted', color: '#10b981' },
+            ]} />
+        </Card>
       )}
       <Title order={4} mb="sm">{user.role === 'admin' ? 'By affiliate' : 'Your totals'}</Title>
       <Table striped highlightOnHover withTableBorder>

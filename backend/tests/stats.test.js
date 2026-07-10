@@ -65,6 +65,15 @@ test('summary attention block is all-time: overdue signatures, unresolved replac
   });
 });
 
+test('daily buckets leads per London day', async () => {
+  const { admin } = await seed();
+  const res = await request(createApp())
+    .get('/api/v1/dashboard/daily?from=2026-07-04&to=2026-07-06')
+    .set('Authorization', `Bearer ${signToken(admin)}`);
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(res.body, [{ date: '2026-07-05', submitted: 4, accepted: 2 }]);
+});
+
 test('breakdown groups by affiliate; affiliate user sees only own row', async () => {
   const { admin, affUser } = await seed();
   const app = createApp();

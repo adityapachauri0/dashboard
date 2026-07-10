@@ -96,6 +96,23 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
   });
 });
 
+router.get('/dashboard/daily', requireAuth, async (req, res) => {
+  const range = dateRange(req.query);
+  const match = buildLeadFilter({ ...req.query, ...range }, req.user);
+  const rows = await Lead.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$submitted_at', timezone: 'Europe/London' } },
+        submitted: { $sum: 1 },
+        accepted: { $sum: is('initial_status', 'accepted') },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ]);
+  res.json(rows.map((r) => ({ date: r._id, submitted: r.submitted, accepted: r.accepted })));
+});
+
 router.get('/dashboard/affiliate-breakdown', requireAuth, async (req, res) => {
   const range = dateRange(req.query);
   const match = buildLeadFilter({ ...req.query, ...range }, req.user);
