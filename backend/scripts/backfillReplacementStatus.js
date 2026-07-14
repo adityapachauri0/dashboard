@@ -1,5 +1,6 @@
 // One-shot, idempotent backfill for the replacement lifecycle (spec 2026-07-14).
 // Usage: node scripts/backfillReplacementStatus.js
+require('dotenv').config();
 const { connectDB } = require('../config/db');
 const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
@@ -34,4 +35,5 @@ const Lead = require('../models/Lead');
   }
   console.log(`backfilled ${n} leads`);
   await mongoose.disconnect();
-})();
+  process.exit(0);
+})().catch((e) => { console.error(e); process.exit(1); });
