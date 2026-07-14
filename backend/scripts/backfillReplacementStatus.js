@@ -4,6 +4,8 @@ require('dotenv').config();
 const { connectDB } = require('../config/db');
 const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
+const Affiliate = require('../models/Affiliate');
+const { applyStatusChanges } = require('../services/statusService');
 
 (async () => {
   await connectDB();
@@ -26,6 +28,10 @@ const Lead = require('../models/Lead');
       lead.history.push({ at: new Date(), field: 'replaced_by_lead', from: lead.replaced_by_lead.ref, to: null, source: 'manual', user: 'backfill' });
       lead.replaced_by_lead = null;
       lead.replacement_status = 'required';
+      // money was computed while replaced_by_lead was set (payable_status='replaced');
+      // recompute now that the link is cleared, same as the go-forward reopen path.
+      const affiliate = await Affiliate.findById(lead.affiliate_id);
+      applyStatusChanges(lead, {}, affiliate?.rate_card || {}, { source: 'manual', user: 'backfill' });
     } else {
       lead.replacement_status = 'supplied';
     }
