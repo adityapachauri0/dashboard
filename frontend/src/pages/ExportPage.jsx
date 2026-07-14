@@ -3,7 +3,7 @@ import { Alert, Button, Card, Select, Stack, Text, Title } from '@mantine/core';
 import { DatePickerInput, MonthPickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, download, getUser } from '../api';
-import { LABELS } from '../components/StatusBadge';
+import { PAYMENT_FILTER_OPTIONS, paymentFilterToParams } from '../components/StatusBadge';
 
 const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') }));
 
@@ -13,7 +13,8 @@ export default function ExportPage() {
   const [affiliateId, setAffiliateId] = useState(null);
   const [range, setRange] = useState([dayjs().startOf('month').toDate(), new Date()]);
   const [initialStatus, setInitialStatus] = useState(null);
-  const [payableStatus, setPayableStatus] = useState(null);
+  const [payment, setPayment] = useState(null);
+  const [nextUpdate, setNextUpdate] = useState(null);
   const [period, setPeriod] = useState(null);
   const [format, setFormat] = useState('xlsx');
   const [error, setError] = useState(null);
@@ -42,7 +43,8 @@ export default function ExportPage() {
       if (range[0]) params.set('from', dayjs(range[0]).format('YYYY-MM-DD'));
       if (range[1]) params.set('to', dayjs(range[1]).format('YYYY-MM-DD'));
       if (initialStatus) params.set('initial_status', initialStatus);
-      if (payableStatus) params.set('payable_status', payableStatus);
+      for (const [k, v] of Object.entries(paymentFilterToParams(payment))) params.set(k, v);
+      if (nextUpdate) params.set('next_update', nextUpdate);
       await download(`/dashboard/export.${format}?${params}`, `leads-export-${dayjs().format('YYYY-MM-DD')}.${format}`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
@@ -66,8 +68,15 @@ export default function ExportPage() {
           <DatePickerInput type="range" label="Date range" value={range} onChange={(v) => { setPeriod(null); setRange(v); }} />
           <Select label="Lead status" placeholder="Any" clearable data={opts(['pending', 'accepted', 'rejected'])} value={initialStatus} onChange={setInitialStatus} />
           <Select label="Payment status" placeholder="Any" clearable
-            data={['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'].map((v) => ({ value: v, label: LABELS[v] || v }))}
-            value={payableStatus} onChange={setPayableStatus} />
+            data={PAYMENT_FILTER_OPTIONS}
+            value={payment} onChange={setPayment} />
+          <Select label="Next update" placeholder="Any" clearable
+            data={[
+              { value: 'awaiting_confirmation', label: 'Awaiting confirmation' },
+              { value: 'replacement_required', label: 'Replacement required' },
+              { value: 'complete', label: 'Complete' },
+            ]}
+            value={nextUpdate} onChange={setNextUpdate} />
           <Select label="Format" value={format} allowDeselect={false}
             data={[{ value: 'xlsx', label: 'Excel (.xlsx)' }, { value: 'csv', label: 'CSV (.csv)' }]}
             onChange={setFormat} />
