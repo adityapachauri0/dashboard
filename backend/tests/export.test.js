@@ -111,3 +111,28 @@ test('statement.xlsx scopes to affiliate+month, requires params, pins affiliate 
   assert.strictEqual(pinned.status, 200);
   assert.match(pinned.headers['content-disposition'], /statement-aaa-2026-06\.xlsx/);
 });
+
+test('replacement_status and next_update filters narrow the export', async () => {
+  const aff = await Affiliate.create({ name: 'F', lead_source: 'fff' });
+  const admin = await User.create({ email: 'f@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  await Lead.create({ ref: 'KB-2026-000041', affiliate_id: aff._id, initial_status: 'accepted', signature_status: 'failed', replacement_status: 'required', replacement_requested_at: new Date() });
+  await Lead.create({ ref: 'KB-2026-000042', affiliate_id: aff._id, initial_status: 'accepted', payable_status: 'payable' });
+  await Lead.create({ ref: 'KB-2026-000043', affiliate_id: aff._id, initial_status: 'accepted', payable_status: 'partial_pending_confirmation' });
+
+  const auth = ['Authorization', `Bearer ${signToken(admin)}`];
+  let res = await request(createApp()).get('/api/v1/dashboard/export.csv?replacement_status=required').set(...auth);
+  assert.ok(res.text.includes('KB-2026-000041'));
+  assert.ok(!res.text.includes('KB-2026-000042'));
+
+  res = await request(createApp()).get('/api/v1/dashboard/export.csv?next_update=replacement_required').set(...auth);
+  assert.ok(res.text.includes('KB-2026-000041'));
+  assert.ok(!res.text.includes('KB-2026-000043'));
+
+  res = await request(createApp()).get('/api/v1/dashboard/export.csv?next_update=awaiting_confirmation').set(...auth);
+  assert.ok(res.text.includes('KB-2026-000043'));
+  assert.ok(!res.text.includes('KB-2026-000041'));
+
+  res = await request(createApp()).get('/api/v1/dashboard/export.csv?next_update=complete').set(...auth);
+  assert.ok(res.text.includes('KB-2026-000042'));
+  assert.ok(!res.text.includes('KB-2026-000041'));
+});

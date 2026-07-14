@@ -16,6 +16,19 @@ function buildLeadFilter(query, user) {
     if (typeof query[f] === 'string' && query[f]) filter[f] = query[f];
   }
   if (query.needs_replacement === 'true') filter.needs_replacement = true;
+  if (['required', 'supplied', 'closed'].includes(query.replacement_status)) {
+    filter.replacement_status = query.replacement_status;
+  }
+  // "Next update" mirrors the Leads-page column: what is this lead waiting on?
+  if (query.next_update === 'awaiting_confirmation') filter.payable_status = 'partial_pending_confirmation';
+  if (query.next_update === 'replacement_required') filter.replacement_status = 'required';
+  if (query.next_update === 'complete') {
+    // nothing pending: payable now, or the obligation fully closed
+    filter.$and = [
+      ...(filter.$and || []),
+      { $or: [{ payable_status: { $in: ['payable', 'payable_full'] } }, { replacement_status: 'closed' }] },
+    ];
+  }
   if (query.from || query.to) filter.submitted_at = {};
   if (query.from) filter.submitted_at.$gte = new Date(query.from);
   if (query.to) filter.submitted_at.$lte = new Date(new Date(query.to).setHours(23, 59, 59, 999));
