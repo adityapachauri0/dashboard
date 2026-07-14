@@ -51,9 +51,10 @@ export default function Summary() {
         <DatePickerInput type="range" value={range} onChange={setRange} allowSingleDateInRange w={280} />
       </Group>
       {error && <Alert color="red" mb="md">{error}</Alert>}
-      {summary?.attention && (summary.attention.overdue_signature + summary.attention.needs_replacement + summary.attention.awaiting_confirmation + (summary.attention.possible_duplicates || 0)) > 0 && (
+      {summary?.attention && (summary.attention.overdue_replacements + summary.attention.overdue_signature + summary.attention.needs_replacement + summary.attention.awaiting_confirmation + (summary.attention.possible_duplicates || 0)) > 0 && (
         <Alert color="yellow" mb="md" title="Needs attention">
           {[
+            summary.attention.overdue_replacements > 0 && `${summary.attention.overdue_replacements} replacement${summary.attention.overdue_replacements === 1 ? '' : 's'} OVERDUE (72h SLA breached)`,
             summary.attention.overdue_signature > 0 && `${summary.attention.overdue_signature} signature check${summary.attention.overdue_signature === 1 ? '' : 's'} overdue`,
             summary.attention.needs_replacement > 0 && `${summary.attention.needs_replacement} replacement${summary.attention.needs_replacement === 1 ? '' : 's'} needed`,
             summary.attention.awaiting_confirmation > 0 && `${summary.attention.awaiting_confirmation} part-paid — awaiting law firm`,
@@ -68,7 +69,7 @@ export default function Summary() {
           <Stat label="Rejected" value={summary.rejected} accent="var(--mantine-color-red-6)" />
           <Stat label="Pending" value={summary.pending} accent="var(--mantine-color-yellow-6)" />
           <Stat label="Acceptance rate" value={summary.acceptance_rate} suffix="%" />
-          <Stat label="Awaiting signature" value={summary.awaiting_signature} accent="var(--mantine-color-teal-6)" />
+          <Stat label="Outstanding replacements" value={summary.outstanding_replacements} accent="var(--mantine-color-red-6)" />
           <Stat label="Awaiting confirmation" value={summary.awaiting_confirmation} accent="var(--mantine-color-indigo-6)" />
           <Stat label="Total due" value={`£${(summary.total_due || 0).toFixed(2)}`} />
         </SimpleGrid>
@@ -89,7 +90,7 @@ export default function Summary() {
           <Table.Tr>
             <Table.Th>Affiliate</Table.Th><Table.Th>Submitted</Table.Th><Table.Th>Accepted</Table.Th>
             <Table.Th>Rejected</Table.Th><Table.Th>Pending</Table.Th><Table.Th>Accept %</Table.Th>
-            <Table.Th>Payable</Table.Th><Table.Th>Replacements</Table.Th><Table.Th>Owed</Table.Th>
+            <Table.Th>Payable</Table.Th><Table.Th>Required</Table.Th><Table.Th>Supplied</Table.Th><Table.Th>Outstanding</Table.Th><Table.Th>Owed</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -99,7 +100,7 @@ export default function Summary() {
               <Table.Td>{r.submitted}</Table.Td><Table.Td>{r.accepted}</Table.Td>
               <Table.Td>{r.rejected}</Table.Td><Table.Td>{r.pending}</Table.Td>
               <Table.Td>{r.acceptance_rate}%</Table.Td><Table.Td>{r.payable}</Table.Td>
-              <Table.Td>{r.replacements}</Table.Td><Table.Td>£{(r.owed || 0).toFixed(2)}</Table.Td>
+              <Table.Td>{r.replacement_required}</Table.Td><Table.Td>{r.replacement_supplied}</Table.Td><Table.Td>{r.outstanding}</Table.Td><Table.Td>£{(r.owed || 0).toFixed(2)}</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
