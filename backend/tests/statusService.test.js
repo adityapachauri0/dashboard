@@ -65,3 +65,42 @@ test('law firm confirmation upgrades searched lead to payable_full', () => {
   assert.strictEqual(lead.payable_status, 'payable_full');
   assert.strictEqual(lead.amounts.total_due, 40);
 });
+
+test('signature failure opens a replacement obligation and starts the 72h clock', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', search_status: 'virgin' }, rates, { source: 'import' });
+  applyStatusChanges(lead, { signature_status: 'failed' }, rates, { source: 'webhook' });
+  assert.strictEqual(lead.replacement_status, 'required');
+  assert.ok(lead.replacement_requested_at instanceof Date);
+  assert.strictEqual(lead.payable_status, 'not_payable');
+  const fields = lead.history.map((h) => h.field);
+  assert.ok(fields.includes('replacement_status'));
+  assert.ok(fields.includes('replacement_requested_at'));
+});
+
+test('re-applying a failed signature does not reset the clock or duplicate history', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', signature_status: 'failed' }, rates, { source: 'webhook' });
+  const firstClock = lead.replacement_requested_at;
+  const historyLen = lead.history.length;
+  applyStatusChanges(lead, { signature_status: 'failed' }, rates, { source: 'import' });
+  assert.strictEqual(lead.replacement_requested_at, firstClock);
+  assert.strictEqual(lead.history.length, historyLen);
+});
+
+test('linking a replacement moves the original to supplied', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', signature_status: 'failed' }, rates, { source: 'webhook' });
+  lead.replaced_by_lead = 'someObjectId'; // linking is done by the route; choke point reacts
+  applyStatusChanges(lead, {}, rates, { source: 'api' });
+  assert.strictEqual(lead.replacement_status, 'supplied');
+  assert.strictEqual(lead.payable_status, 'replaced');
+});
+
+test('a linked lead that was never required still becomes supplied (pre-feature data)', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', search_status: 'virgin' }, rates, { source: 'import' });
+  lead.replaced_by_lead = 'someObjectId';
+  applyStatusChanges(lead, {}, rates, { source: 'manual' });
+  assert.strictEqual(lead.replacement_status, 'supplied');
+});

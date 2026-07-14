@@ -29,6 +29,22 @@ function applyStatusChanges(lead, changes, rateCard, { source, user } = {}) {
     lead.needs_replacement = true;
   }
 
+  // Replacement lifecycle — own-lead transitions only. Cross-lead close/reopen
+  // (replacement accepted/rejected) lives in replacementService.
+  if (!lead.replacement_status) lead.replacement_status = 'none'; // plain objects / pre-backfill docs
+  if (lead.signature_status === 'failed' && lead.replacement_status === 'none') {
+    record('replacement_status', 'none', 'required');
+    lead.replacement_status = 'required';
+    if (!lead.replacement_requested_at) {
+      record('replacement_requested_at', null, now);
+      lead.replacement_requested_at = now; // 72h SLA clock — set once, never reset
+    }
+  }
+  if (lead.replaced_by_lead && ['none', 'required'].includes(lead.replacement_status)) {
+    record('replacement_status', lead.replacement_status, 'supplied');
+    lead.replacement_status = 'supplied';
+  }
+
   const money = computeMoney(lead, rateCard);
   if (lead.payable_status !== money.payable_status) {
     record('payable_status', lead.payable_status, money.payable_status);
