@@ -92,3 +92,42 @@ test('admin can manually match an unmatched event', async () => {
   assert.strictEqual(updated.initial_status, 'rejected');
   assert.strictEqual(updated.rejection_reason, 'no credit file');
 });
+
+test('webhook accepting a replacement lead closes the original obligation', async () => {
+  const aff = await Affiliate.create({ name: 'W', lead_source: 'www', rate_card: { virgin_rate: 40 } });
+  const original = await Lead.create({
+    ref: 'KB-2026-000031', affiliate_id: aff._id, initial_status: 'accepted', signature_status: 'failed',
+    needs_replacement: true, replacement_status: 'required', replacement_requested_at: new Date(),
+  });
+  const repl = await Lead.create({ ref: 'KB-2026-000032', affiliate_id: aff._id, replaces_lead: original._id });
+  original.replaced_by_lead = repl._id;
+  original.replacement_status = 'supplied';
+  await original.save();
+
+  const res = await request(createApp())
+    .post(`/api/v1/webhooks/platform?token=${process.env.WEBHOOK_TOKEN || ''}`)
+    .send({ ref: 'KB-2026-000032', status: 'accepted' });
+  assert.strictEqual(res.status, 200);
+  const after = await Lead.findById(original._id);
+  assert.strictEqual(after.replacement_status, 'closed');
+});
+
+test('webhook rejecting a replacement lead reopens the original obligation', async () => {
+  const aff = await Affiliate.create({ name: 'W2', lead_source: 'ww2', rate_card: { virgin_rate: 40 } });
+  const original = await Lead.create({
+    ref: 'KB-2026-000033', affiliate_id: aff._id, initial_status: 'accepted', signature_status: 'failed',
+    needs_replacement: true, replacement_status: 'required', replacement_requested_at: new Date('2026-07-10T10:00:00Z'),
+  });
+  const repl = await Lead.create({ ref: 'KB-2026-000034', affiliate_id: aff._id, replaces_lead: original._id });
+  original.replaced_by_lead = repl._id;
+  original.replacement_status = 'supplied';
+  await original.save();
+
+  await request(createApp())
+    .post(`/api/v1/webhooks/platform?token=${process.env.WEBHOOK_TOKEN || ''}`)
+    .send({ ref: 'KB-2026-000034', status: 'rejected', rejection_reason: 'duplicate claim' });
+  const after = await Lead.findById(original._id);
+  assert.strictEqual(after.replacement_status, 'required');
+  assert.strictEqual(after.replaced_by_lead, null);
+  assert.strictEqual(after.replacement_requested_at.toISOString(), '2026-07-10T10:00:00.000Z');
+});

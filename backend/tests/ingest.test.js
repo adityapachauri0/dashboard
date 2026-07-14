@@ -138,3 +138,24 @@ test('duplicate outside 30-day window is not flagged; replacements exempt', asyn
   const replLead = await Lead.findOne({ ref: repl.body.ref });
   assert.strictEqual(replLead.possible_duplicate, false);
 });
+
+test('ingesting a replacement marks the original supplied', async () => {
+  const { key } = await makeAffiliate('repl1');
+  const app = createApp();
+  const first = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'Orig', last_name: 'Lead', email: 'orig@x.com' });
+  const original = await Lead.findOne({ ref: first.body.ref });
+  original.initial_status = 'accepted';
+  original.signature_status = 'failed';
+  original.needs_replacement = true;
+  original.replacement_status = 'required';
+  original.replacement_requested_at = new Date();
+  await original.save();
+
+  const res = await request(app).post('/api/v1/leads').set('X-API-Key', key)
+    .send({ first_name: 'Repl', last_name: 'Lead', email: 'repl@x.com', replaces_ref: first.body.ref });
+  assert.strictEqual(res.status, 201);
+  const after = await Lead.findOne({ ref: first.body.ref });
+  assert.strictEqual(after.replacement_status, 'supplied');
+  assert.strictEqual(after.payable_status, 'replaced');
+});

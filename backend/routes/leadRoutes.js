@@ -4,6 +4,7 @@ const Affiliate = require('../models/Affiliate');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { applyStatusChanges } = require('../services/statusService');
 const { buildLeadFilter } = require('../services/leadFilter');
+const { propagateReplacementOutcome } = require('../services/replacementService');
 
 const router = express.Router();
 
@@ -62,6 +63,7 @@ router.patch('/dashboard/leads/:id', requireAuth, requireAdmin, async (req, res)
 
   applyStatusChanges(lead, req.body, affiliate?.rate_card || {}, meta);
   await lead.save();
+  await propagateReplacementOutcome(lead, meta);
   res.json(lead.toObject());
 });
 

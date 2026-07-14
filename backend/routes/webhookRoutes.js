@@ -7,6 +7,7 @@ const WebhookEvent = require('../models/WebhookEvent');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { canonicalFromPayload } = require('../services/normalize');
 const { applyStatusChanges } = require('../services/statusService');
+const { propagateReplacementOutcome } = require('../services/replacementService');
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ async function applyEventToLead(event, lead) {
   // orphaned affiliate -> zero rate card; computeMoney treats missing rates as 0
   applyStatusChanges(lead, changes, affiliate?.rate_card || {}, { source: 'webhook' });
   await lead.save();
+  await propagateReplacementOutcome(lead, { source: 'webhook' });
   event.matched_lead = lead._id;
   await event.save();
 }

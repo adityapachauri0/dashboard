@@ -6,6 +6,7 @@ const { apiKeyAuth } = require('../middleware/apiKey');
 const { applyStatusChanges } = require('../services/statusService');
 const { submitLead } = require('../services/platformAdapter');
 const { normalizeEmail, normalizePhone } = require('../services/normalize');
+const { propagateReplacementOutcome } = require('../services/replacementService');
 
 const DUP_WINDOW_DAYS = 30;
 
@@ -91,6 +92,7 @@ router.post('/leads', ingestLimiter, apiKeyAuth, async (req, res) => {
   }
 
   await lead.save();
+  if (platformResponse) await propagateReplacementOutcome(lead, { source: 'api' });
   res.status(201).json({ ref: lead.ref, status: lead.initial_status });
 });
 

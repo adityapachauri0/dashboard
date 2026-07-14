@@ -7,6 +7,7 @@ const ImportRecord = require('../models/ImportRecord');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { normalizeField } = require('../services/normalize');
 const { applyStatusChanges } = require('../services/statusService');
+const { propagateReplacementOutcome } = require('../services/replacementService');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -63,6 +64,7 @@ router.post('/imports', upload.single('file'), async (req, res) => {
     }
     applyStatusChanges(lead, changes, rateCards.get(affId), { source: 'import', user: req.user.email });
     await lead.save();
+    await propagateReplacementOutcome(lead, { source: 'import', user: req.user.email });
     matched++;
   }
 
