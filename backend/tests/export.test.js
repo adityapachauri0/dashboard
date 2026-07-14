@@ -136,3 +136,17 @@ test('replacement_status and next_update filters narrow the export', async () =>
   assert.ok(res.text.includes('KB-2026-000042'));
   assert.ok(!res.text.includes('KB-2026-000041'));
 });
+
+test('export includes replacement columns with SLA label', async () => {
+  const aff = await Affiliate.create({ name: 'E', lead_source: 'eee' });
+  const admin = await User.create({ email: 'e@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  const HOUR = 3600 * 1000;
+  await Lead.create({ ref: 'KB-2026-000071', affiliate_id: aff._id, signature_status: 'failed', replacement_status: 'required', replacement_requested_at: new Date(Date.now() - 80 * HOUR) });
+  const res = await request(createApp()).get('/api/v1/dashboard/export.csv').set('Authorization', `Bearer ${signToken(admin)}`);
+  const [header, row] = res.text.trim().split('\n');
+  assert.ok(header.includes('replacement_status'));
+  assert.ok(header.includes('replacement_requested_at'));
+  assert.ok(header.includes('replacement_sla'));
+  assert.ok(row.includes('required'));
+  assert.ok(row.includes('OVERDUE'));
+});

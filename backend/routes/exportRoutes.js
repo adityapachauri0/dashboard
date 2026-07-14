@@ -5,6 +5,7 @@ const Lead = require('../models/Lead');
 const Affiliate = require('../models/Affiliate');
 const { requireAuth } = require('../middleware/auth');
 const { buildLeadFilter } = require('../services/leadFilter');
+const { slaState } = require('../services/replacementService');
 
 const router = express.Router();
 
@@ -18,6 +19,7 @@ const COLUMNS = [
   'ref', 'submitted_at', 'affiliate', 'lead_source', 'brand', 'applicant_name',
   'initial_status', 'rejection_reason', 'search_status', 'signature_status',
   'signature_deadline', 'law_firm_confirmed', 'payable_status',
+  'replacement_status', 'replacement_requested_at', 'replacement_sla',
   'upfront_due', 'confirmation_due', 'total_due', 'platform_ref', 'last_updated',
 ];
 
@@ -39,6 +41,9 @@ async function fetchExportRows(query, user) {
     signature_deadline: l.signature_deadline?.toISOString() || '',
     law_firm_confirmed: l.law_firm_confirmed ? 'yes' : 'no',
     payable_status: l.payable_status,
+    replacement_status: l.replacement_status || 'none',
+    replacement_requested_at: l.replacement_requested_at?.toISOString() || '',
+    replacement_sla: slaState(l)?.label || '',
     upfront_due: l.amounts?.upfront_due ?? 0,
     confirmation_due: l.amounts?.confirmation_due ?? 0,
     total_due: l.amounts?.total_due ?? 0,
@@ -106,6 +111,9 @@ router.get('/dashboard/statement.xlsx', requireAuth, async (req, res) => {
     total_due: sum('total_due'),
   });
   totals.font = { bold: true };
+  const outstanding = rows.filter((r) => r.replacement_status === 'required').length;
+  const outRow = ws.addRow({ ref: 'OUTSTANDING REPLACEMENTS', applicant_name: String(outstanding) });
+  outRow.font = { bold: true };
 
   const buffer = await wb.xlsx.writeBuffer();
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
