@@ -6,7 +6,7 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, getUser } from '../api';
-import StatusBadge, { LABELS } from '../components/StatusBadge';
+import StatusBadge, { PAYMENT_FILTER_OPTIONS, paymentFilterToParams } from '../components/StatusBadge';
 
 const PAGE_SIZE = 50;
 const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') }));
@@ -14,9 +14,11 @@ const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') 
 // What happens next for this lead, in plain English (mirrors the money flow:
 // virgin = 100% payable; searched = part-paid, rest on law firm confirmation)
 function nextUpdate(l) {
-  if (l.payable_status === 'replaced' || l.initial_status === 'rejected') return '—';
+  if (l.initial_status === 'rejected') return '—';
+  if (l.replacement_status === 'required') return 'Replacement required';
+  if (l.replacement_status === 'supplied') return 'Replacement supplied — awaiting acceptance';
+  if (l.replacement_status === 'closed' || l.payable_status === 'replaced') return '—';
   if (l.initial_status === 'pending') return 'Awaiting acceptance';
-  if (l.needs_replacement && !l.replaced_by_lead) return 'Replacement needed';
   if (l.signature_status === 'pending') {
     return `Signature check by ${l.signature_deadline ? dayjs(l.signature_deadline).format('DD MMM') : '—'}`;
   }
@@ -28,7 +30,7 @@ function nextUpdate(l) {
 export default function Leads() {
   const user = getUser();
   const isAdmin = user.role === 'admin';
-  const [filters, setFilters] = useState({ affiliate_id: null, initial_status: null, search_status: null, signature_status: null, payable_status: null, q: '' });
+  const [filters, setFilters] = useState({ affiliate_id: null, initial_status: null, search_status: null, signature_status: null, payment: null, next_update: null, q: '' });
   const [qInput, setQInput] = useState('');
   const [range, setRange] = useState([null, null]);
   const [page, setPage] = useState(1);
@@ -54,7 +56,9 @@ export default function Leads() {
   useEffect(() => {
     let stale = false;
     const params = new URLSearchParams({ page, limit: PAGE_SIZE });
-    for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+    const { payment, ...rest } = filters;
+    for (const [k, v] of Object.entries(rest)) if (v) params.set(k, v);
+    for (const [k, v] of Object.entries(paymentFilterToParams(payment))) params.set(k, v);
     if (range[0]) params.set('from', dayjs(range[0]).format('YYYY-MM-DD'));
     if (range[1]) params.set('to', dayjs(range[1]).format('YYYY-MM-DD'));
     api(`/dashboard/leads?${params}`).then((d) => { if (!stale) setData(d); }).catch((e) => { if (!stale) setError(e.message); });
@@ -91,8 +95,15 @@ export default function Leads() {
         <Select placeholder="Search status" clearable w={150} data={opts(['virgin', 'searched', 'unknown'])} value={filters.search_status} onChange={set('search_status')} />
         <Select placeholder="Signature" clearable w={140} data={opts(['pending', 'passed', 'failed'])} value={filters.signature_status} onChange={set('signature_status')} />
         <Select placeholder="Payment status" clearable w={230}
-          data={['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'].map((v) => ({ value: v, label: LABELS[v] || v }))}
-          value={filters.payable_status} onChange={set('payable_status')} />
+          data={PAYMENT_FILTER_OPTIONS}
+          value={filters.payment} onChange={set('payment')} />
+        <Select placeholder="Next update" clearable w={180}
+          data={[
+            { value: 'awaiting_confirmation', label: 'Awaiting confirmation' },
+            { value: 'replacement_required', label: 'Replacement required' },
+            { value: 'complete', label: 'Complete' },
+          ]}
+          value={filters.next_update} onChange={set('next_update')} />
         <DatePickerInput type="range" placeholder="Date range" clearable value={range} onChange={(v) => { setPage(1); setRange(v); }} w={240} />
         <TextInput placeholder="Search ref / name" value={qInput} onChange={(e) => setQInput(e.target.value)} w={180} />
       </Group>
@@ -122,7 +133,7 @@ export default function Leads() {
                 {l.signature_status === 'pending' && l.signature_deadline && dayjs().isAfter(l.signature_deadline) && (
                   <Badge color="red" variant="outline" ml={4}>overdue{[0, 6].includes(dayjs(l.signature_deadline).day()) ? ' (weekend)' : ''}</Badge>
                 )}
-                {l.needs_replacement && !l.replaced_by_lead && <Badge color="red" ml={4}>needs replacement</Badge>}
+                {l.replacement_status === 'required' && <Badge color="red" ml={4}>replacement required</Badge>}
               </Table.Td>
               <Table.Td><StatusBadge field="payable_status" value={l.payable_status} /></Table.Td>
               <Table.Td><Text size="sm" c="dimmed">{nextUpdate(l)}</Text></Table.Td>
@@ -151,6 +162,9 @@ export default function Leads() {
               <StatusBadge field="search_status" value={selected.search_status} />
               <StatusBadge field="signature_status" value={selected.signature_status} />
               <StatusBadge field="payable_status" value={selected.payable_status} />
+              {selected.replacement_status && selected.replacement_status !== 'none' && (
+                <StatusBadge field="replacement_status" value={selected.replacement_status} />
+              )}
             </Group>
             <Text size="sm">
               Affiliate: <b>{selected.affiliate_id?.name}</b> · Brand: {selected.brand || '—'} · Platform ref: {selected.platform_ref || '—'}
