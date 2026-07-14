@@ -34,6 +34,15 @@ const leadSchema = new mongoose.Schema(
       default: 'not_payable',
     },
     needs_replacement: { type: Boolean, default: false },
+    // Replacement obligation lifecycle (spec 2026-07-14). SLA deadline is always
+    // derived as replacement_requested_at + 72h — never stored.
+    replacement_status: {
+      type: String,
+      enum: ['none', 'required', 'supplied', 'closed'],
+      default: 'none',
+      index: true,
+    },
+    replacement_requested_at: Date,
     // Duplicate detection: normalized contact identity + flag (flag-only — the
     // lead is still accepted; an admin clears or acts on it from the dashboard)
     contact_email: { type: String, index: true },

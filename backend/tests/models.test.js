@@ -46,3 +46,14 @@ test('affiliate lead_source is unique', async () => {
   await Affiliate.ensureIndexes();
   await assert.rejects(Affiliate.create({ name: 'B', lead_source: 'dup' }));
 });
+
+test('lead has replacement lifecycle fields with safe defaults', async () => {
+  const aff = await Affiliate.create({ name: 'R', lead_source: 'rrr' });
+  const lead = await Lead.create({ ref: 'KB-2026-900001', affiliate_id: aff._id });
+  assert.strictEqual(lead.replacement_status, 'none');
+  assert.strictEqual(lead.replacement_requested_at, undefined);
+  await assert.rejects(
+    Lead.create({ ref: 'KB-2026-900002', affiliate_id: aff._id, replacement_status: 'bogus' }),
+    /replacement_status/
+  );
+});
