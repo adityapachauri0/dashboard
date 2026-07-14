@@ -51,7 +51,7 @@ test('summary attention block is all-time: overdue signatures, unresolved replac
   // deadline in the future → not overdue
   await Lead.create({ ref: 'KB-2026-000006', affiliate_id: affC._id, submitted_at: june, initial_status: 'accepted', signature_status: 'pending', signature_deadline: new Date('2099-01-01T17:00:00Z') });
   // failed signature, replacement not yet linked → needs replacement
-  await Lead.create({ ref: 'KB-2026-000007', affiliate_id: affC._id, submitted_at: june, initial_status: 'accepted', signature_status: 'failed', needs_replacement: true });
+  await Lead.create({ ref: 'KB-2026-000007', affiliate_id: affC._id, submitted_at: june, initial_status: 'accepted', signature_status: 'failed', needs_replacement: true, replacement_status: 'required' });
   const res = await request(createApp())
     .get('/api/v1/dashboard/summary?from=2026-07-05&to=2026-07-05')
     .set('Authorization', `Bearer ${signToken(admin)}`);
@@ -60,6 +60,7 @@ test('summary attention block is all-time: overdue signatures, unresolved replac
   assert.deepStrictEqual(res.body.attention, {
     overdue_signature: 1, // seed lead 1 has signature pending but NO deadline → excluded
     needs_replacement: 1,
+    overdue_replacements: 0, // seed lead 7 has no replacement_requested_at → not overdue
     awaiting_confirmation: 1, // seed lead 3, counted all-time
     possible_duplicates: 0,
   });
@@ -91,4 +92,25 @@ test('breakdown groups by affiliate; affiliate user sees only own row', async ()
     .set('Authorization', `Bearer ${signToken(affUser)}`);
   assert.strictEqual(affRes.body.length, 1);
   assert.strictEqual(affRes.body[0].name, 'A');
+});
+
+test('summary exposes outstanding + overdue replacements; breakdown has reconciliation columns', async () => {
+  const { admin } = await seed();
+  const HOUR = 3600 * 1000;
+  const aff = await Affiliate.findOne({ lead_source: 'aaa' });
+  await Lead.create({ ref: 'KB-2026-000061', affiliate_id: aff._id, submitted_at: new Date('2026-07-05T10:00:00Z'), initial_status: 'accepted', signature_status: 'failed', replacement_status: 'required', replacement_requested_at: new Date(Date.now() - 80 * HOUR) }); // overdue
+  await Lead.create({ ref: 'KB-2026-000062', affiliate_id: aff._id, submitted_at: new Date('2026-07-05T10:00:00Z'), initial_status: 'accepted', signature_status: 'failed', replacement_status: 'supplied', replacement_requested_at: new Date() });
+  await Lead.create({ ref: 'KB-2026-000063', affiliate_id: aff._id, submitted_at: new Date('2026-07-05T10:00:00Z'), initial_status: 'accepted', signature_status: 'failed', replacement_status: 'closed', replacement_requested_at: new Date() });
+
+  const auth = ['Authorization', `Bearer ${signToken(admin)}`];
+  const s = await request(createApp()).get('/api/v1/dashboard/summary?from=2026-07-05&to=2026-07-05').set(...auth);
+  assert.strictEqual(s.body.outstanding_replacements, 1);
+  assert.strictEqual(s.body.attention.needs_replacement, 1);
+  assert.strictEqual(s.body.attention.overdue_replacements, 1);
+
+  const b = await request(createApp()).get('/api/v1/dashboard/affiliate-breakdown?from=2026-07-05&to=2026-07-05').set(...auth);
+  const rowA = b.body.find((r) => r.lead_source === 'aaa');
+  assert.strictEqual(rowA.replacement_required, 3); // ever raised
+  assert.strictEqual(rowA.replacement_supplied, 2); // supplied + closed
+  assert.strictEqual(rowA.outstanding, 1);          // still owed
 });
