@@ -24,8 +24,12 @@ function buildLeadFilter(query, user) {
     filter.replacement_status = { $in: ['supplied', 'closed'] };
   }
   // signature also matches legacy rows from before the reason existed
-  // ($in with null matches missing fields)
-  if (query.replacement_reason === 'signature') filter.replacement_reason = { $in: ['signature', null] };
+  // ($in with null matches missing fields — but that also matches leads with
+  // NO obligation at all, so pin replacement_status when the caller didn't)
+  if (query.replacement_reason === 'signature') {
+    filter.replacement_reason = { $in: ['signature', null] };
+    if (!filter.replacement_status) filter.replacement_status = { $ne: 'none' };
+  }
   if (query.replacement_reason === 'cooling_off') filter.replacement_reason = 'cooling_off';
   // "Next update" mirrors the Leads-page column: what is this lead waiting on?
   if (query.next_update === 'awaiting_confirmation') filter.payable_status = 'partial_pending_confirmation';

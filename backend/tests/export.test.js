@@ -159,6 +159,7 @@ test('export includes cancelled_at and replacement_reason columns', async () => 
     replacement_status: 'required', replacement_reason: 'cooling_off',
   });
   await Lead.create({ ref: 'KB-2026-000602', affiliate_id: aff._id, replacement_status: 'required' }); // legacy
+  await Lead.create({ ref: 'KB-2026-000603', affiliate_id: aff._id }); // no obligation at all
   const res = await request(createApp()).get('/api/v1/dashboard/export.csv').set('Authorization', `Bearer ${signToken(admin)}`);
   const [header, ...lines] = res.text.trim().split('\n');
   assert.ok(header.includes('cancelled_at') && header.includes('replacement_reason'));
@@ -166,6 +167,9 @@ test('export includes cancelled_at and replacement_reason columns', async () => 
   assert.ok(row601.includes('2026-07-15T10:00:00.000Z') && row601.includes('cooling_off'));
   const row602 = lines.find((l) => l.includes('KB-2026-000602'));
   assert.ok(row602.includes('signature')); // legacy fallback
+  const row603 = lines.find((l) => l.includes('KB-2026-000603'));
+  const reasonIdx = header.split(',').indexOf('replacement_reason');
+  assert.strictEqual(row603.split(',')[reasonIdx], ''); // no obligation -> empty cell, not 'signature'
 });
 
 test('statement splits outstanding replacements by reason', async () => {

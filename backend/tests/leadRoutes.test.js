@@ -119,4 +119,38 @@ test('leads list filters by replacement_reason with legacy signature fallback', 
 
   const sig = await request(app).get('/api/v1/dashboard/leads?replacement_reason=signature&replacement_status=supplied_or_closed').set(auth);
   assert.deepStrictEqual(sig.body.rows.map((r) => r.ref), ['KB-2026-000403']);
+
+  // reason=signature ALONE (no replacement_status) must not fall back to matching
+  // every no-obligation lead just because replacement_reason is absent on them too.
+  const sigAlone = await request(app).get('/api/v1/dashboard/leads?replacement_reason=signature').set(auth);
+  assert.deepStrictEqual(sigAlone.body.rows.map((r) => r.ref).sort(), ['KB-2026-000402', 'KB-2026-000403']);
+});
+
+test('admin PATCH cancelled:true then cancelled:false — obligation survives un-cancel, money restored', async () => {
+  const { admin, affA } = await seed();
+  const app = createApp();
+  const auth = { Authorization: `Bearer ${signToken(admin)}` };
+  const lead = await Lead.create({
+    ref: 'KB-2026-000501', affiliate_id: affA._id, lead_source: 'aaa', applicant_name: 'Cancel Test',
+    initial_status: 'accepted', search_status: 'virgin', payable_status: 'payable',
+    amounts: { upfront_due: 40, confirmation_due: 0, total_due: 40 },
+  });
+
+  const cancelRes = await request(app).patch(`/api/v1/dashboard/leads/${lead._id}`).set(auth).send({ cancelled: true });
+  assert.strictEqual(cancelRes.status, 200);
+  assert.strictEqual(cancelRes.body.cancelled, true);
+  assert.ok(cancelRes.body.cancelled_at);
+  assert.strictEqual(cancelRes.body.replacement_status, 'required');
+  assert.strictEqual(cancelRes.body.replacement_reason, 'cooling_off');
+  assert.strictEqual(cancelRes.body.payable_status, 'not_payable');
+  assert.strictEqual(cancelRes.body.amounts.total_due, 0);
+  const cancelledAt = cancelRes.body.cancelled_at;
+
+  const uncancelRes = await request(app).patch(`/api/v1/dashboard/leads/${lead._id}`).set(auth).send({ cancelled: false });
+  assert.strictEqual(uncancelRes.status, 200);
+  assert.strictEqual(uncancelRes.body.cancelled, false);
+  assert.strictEqual(uncancelRes.body.cancelled_at, cancelledAt); // never reset
+  assert.strictEqual(uncancelRes.body.replacement_status, 'required'); // obligation survives un-cancel
+  assert.strictEqual(uncancelRes.body.payable_status, 'payable');
+  assert.strictEqual(uncancelRes.body.amounts.total_due, 40); // money restored to virgin rate
 });

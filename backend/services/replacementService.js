@@ -6,7 +6,7 @@ const SLA_HOURS = 72;
 const HOUR = 3600 * 1000;
 
 // SLA is derived, never stored: contract gives 72h from the replacement request
-// (= signature-failed event) to supply the replacement.
+// event (signature failure or cooling-off cancellation) to supply the replacement.
 function slaState(lead, now = new Date()) {
   if (lead.replacement_status !== 'required' || !lead.replacement_requested_at) return null;
   const deadline = new Date(new Date(lead.replacement_requested_at).getTime() + SLA_HOURS * HOUR);
