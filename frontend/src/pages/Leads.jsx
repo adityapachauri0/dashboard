@@ -6,7 +6,7 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, getUser } from '../api';
-import StatusBadge, { PAYMENT_FILTER_OPTIONS, paymentFilterToParams } from '../components/StatusBadge';
+import StatusBadge, { PAYMENT_FILTER_OPTIONS, paymentFilterToParams, paymentStatus } from '../components/StatusBadge';
 
 const PAGE_SIZE = 50;
 const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') }));
@@ -94,7 +94,7 @@ export default function Leads() {
         <Select placeholder="API status" clearable w={140} data={opts(['pending', 'accepted', 'rejected'])} value={filters.initial_status} onChange={set('initial_status')} />
         <Select placeholder="Search status" clearable w={150} data={opts(['virgin', 'searched', 'unknown'])} value={filters.search_status} onChange={set('search_status')} />
         <Select placeholder="Signature" clearable w={140} data={opts(['pending', 'passed', 'failed'])} value={filters.signature_status} onChange={set('signature_status')} />
-        <Select placeholder="Payment status" clearable w={230}
+        <Select placeholder="Payment status" clearable w={300}
           data={PAYMENT_FILTER_OPTIONS}
           value={filters.payment} onChange={set('payment')} />
         <Select placeholder="Next update" clearable w={180}
@@ -135,7 +135,9 @@ export default function Leads() {
                 )}
                 {l.replacement_status === 'required' && <Badge color="red" ml={4}>replacement required</Badge>}
               </Table.Td>
-              <Table.Td><StatusBadge field="payable_status" value={l.payable_status} /></Table.Td>
+              <Table.Td>
+                {(() => { const p = paymentStatus(l); return <Badge color={p.color} variant="light">{p.label}</Badge>; })()}
+              </Table.Td>
               <Table.Td><Text size="sm" c="dimmed">{nextUpdate(l)}</Text></Table.Td>
             </Table.Tr>
           ))}
@@ -172,6 +174,12 @@ export default function Leads() {
             <Text size="sm">
               Submitted {dayjs(selected.submitted_at).format('DD MMM YYYY HH:mm')} · Signature deadline {selected.signature_deadline ? dayjs(selected.signature_deadline).format('DD MMM YYYY HH:mm') : '—'}
             </Text>
+            {selected.cancelled && (
+              <Alert color="red" p="xs">
+                14-day cooling-off cancellation
+                {selected.cancelled_at ? ` — notified ${dayjs(selected.cancelled_at).format('DD MMM YYYY HH:mm')}` : ''}
+              </Alert>
+            )}
             {selected.possible_duplicate && (
               <Alert color="orange" p="xs">
                 Possible duplicate{selected.duplicate_of_ref ? <> of <Code>{selected.duplicate_of_ref}</Code></> : ''} — same phone/email seen in the last 30 days. Clear the flag below if it's a distinct claim.
@@ -200,6 +208,7 @@ export default function Leads() {
                   {selected.possible_duplicate && (
                     <Switch label="Possible duplicate" checked={edit.possible_duplicate ?? selected.possible_duplicate} onChange={(ev) => setEdit((e) => ({ ...e, possible_duplicate: ev.currentTarget.checked }))} />
                   )}
+                  <Switch label="Cooling-off cancelled" checked={edit.cancelled ?? selected.cancelled ?? false} onChange={(ev) => setEdit((e) => ({ ...e, cancelled: ev.currentTarget.checked }))} />
                   <TextInput label="Replaces ref (link as replacement)" placeholder="KB-2026-000001" value={edit.replaces_ref || ''} onChange={(ev) => setEdit((e) => ({ ...e, replaces_ref: ev.target.value }))} />
                 </Group>
                 <Button onClick={saveEdit} loading={saving} disabled={!Object.keys(edit).length}>Save changes</Button>
