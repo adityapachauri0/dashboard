@@ -64,3 +64,16 @@ test('accepted but search class unknown -> zero, not_payable until classified', 
     upfront_due: 0, confirmation_due: 0, total_due: 0, payable_status: 'not_payable',
   });
 });
+
+test('cooling-off cancellation zeroes a payable lead', () => {
+  const lead = { initial_status: 'accepted', search_status: 'virgin', signature_status: 'passed', cancelled: true };
+  const m = computeMoney(lead, { virgin_rate: 40 });
+  assert.strictEqual(m.payable_status, 'not_payable');
+  assert.strictEqual(m.total_due, 0);
+});
+
+test('replaced still beats cancelled', () => {
+  const lead = { initial_status: 'accepted', search_status: 'virgin', cancelled: true, replaced_by_lead: 'someId' };
+  const m = computeMoney(lead, { virgin_rate: 40 });
+  assert.strictEqual(m.payable_status, 'replaced');
+});

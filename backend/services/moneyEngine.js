@@ -6,6 +6,7 @@ function computeMoney(lead, rateCard) {
   if (lead.replaced_by_lead) return { ...zero, payable_status: 'replaced' };
   if (lead.initial_status !== 'accepted') return { ...zero, payable_status: 'not_payable' };
   if (lead.signature_status === 'failed') return { ...zero, payable_status: 'not_payable' };
+  if (lead.cancelled) return { ...zero, payable_status: 'not_payable' };
 
   if (lead.search_status === 'virgin') {
     const upfront = rateCard.virgin_rate || 0;
