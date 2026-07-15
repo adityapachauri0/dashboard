@@ -6,11 +6,12 @@ import dayjs from 'dayjs';
 import { api, getUser } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
-function Stat({ label, value, accent = 'var(--mantine-color-emerald-5)' }) {
+function Stat({ label, value, detail, accent = 'var(--mantine-color-emerald-5)' }) {
   return (
     <Card withBorder p="md" style={{ borderLeft: `3px solid ${accent}` }}>
       <Text size="xs" c="dimmed" tt="uppercase">{label}</Text>
       <Text fz={24} fw={700}>{value}</Text>
+      {detail && <Text size="xs" c="dimmed">{detail}</Text>}
     </Card>
   );
 }
@@ -24,8 +25,10 @@ function SlaCell({ sla }) {
 export default function Replacements() {
   const user = getUser();
   const isAdmin = user.role === 'admin';
-  const [data, setData] = useState({ rows: [], counts: { required: 0, supplied: 0, closed: 0, overdue: 0 } });
+  const blank = { required: 0, supplied: 0, closed: 0, overdue: 0 };
+  const [data, setData] = useState({ rows: [], counts: { ...blank, signature: blank, cooling_off: blank } });
   const [status, setStatus] = useState(null);
+  const [reason, setReason] = useState(null);
   const [affiliates, setAffiliates] = useState([]);
   const [affiliateId, setAffiliateId] = useState(null);
   const [assigning, setAssigning] = useState(null); // the obligation row being assigned
@@ -41,12 +44,13 @@ export default function Replacements() {
     let stale = false;
     const params = new URLSearchParams();
     if (status) params.set('replacement_status', status);
+    if (reason) params.set('replacement_reason', reason);
     if (affiliateId) params.set('affiliate_id', affiliateId);
     api(`/dashboard/replacements?${params}`)
       .then((d) => { if (!stale) { setData(d); setError(null); } })
       .catch((e) => { if (!stale) setError(e.message); });
     return () => { stale = true; };
-  }, [status, affiliateId, refreshKey]);
+  }, [status, reason, affiliateId, refreshKey]);
 
   async function assign() {
     setBusy(true); setModalError(null);
@@ -66,10 +70,11 @@ export default function Replacements() {
       <Title order={3} mb="md">Replacements</Title>
       {error && <Alert color="red" mb="md" withCloseButton onClose={() => setError(null)}>{error}</Alert>}
       <SimpleGrid cols={{ base: 2, md: 4 }} mb="lg">
-        <Stat label="Required" value={counts.required} accent="var(--mantine-color-red-6)" />
-        <Stat label="Supplied" value={counts.supplied} accent="var(--mantine-color-blue-6)" />
-        <Stat label="Closed" value={counts.closed} accent="var(--mantine-color-green-6)" />
-        <Stat label="Overdue" value={counts.overdue} accent="var(--mantine-color-red-9)" />
+        {['required', 'supplied', 'closed', 'overdue'].map((k) => (
+          <Stat key={k} label={k} value={counts[k]}
+            detail={counts.signature ? `${counts.signature[k]} sig / ${counts.cooling_off[k]} cooling-off` : undefined}
+            accent={{ required: 'var(--mantine-color-red-6)', supplied: 'var(--mantine-color-blue-6)', closed: 'var(--mantine-color-green-6)', overdue: 'var(--mantine-color-red-9)' }[k]} />
+        ))}
       </SimpleGrid>
 
       <Group mb="md" gap="xs">
@@ -80,6 +85,12 @@ export default function Replacements() {
             { value: 'closed', label: 'Closed' },
           ]}
           value={status} onChange={setStatus} />
+        <Select placeholder="Reason" clearable w={190}
+          data={[
+            { value: 'signature', label: 'Signature' },
+            { value: 'cooling_off', label: '14 Day Cooling-Off' },
+          ]}
+          value={reason} onChange={setReason} />
         {isAdmin && (
           <Select placeholder="Affiliate" clearable w={180} value={affiliateId}
             data={affiliates.map((a) => ({ value: a._id, label: a.name }))} onChange={setAffiliateId} />
@@ -91,7 +102,8 @@ export default function Replacements() {
           <Table.Tr>
             <Table.Th>Ref</Table.Th>
             {isAdmin && <Table.Th>Affiliate</Table.Th>}
-            <Table.Th>Signature failed</Table.Th>
+            <Table.Th>Triggered</Table.Th>
+            <Table.Th>Reason</Table.Th>
             <Table.Th>SLA (72h)</Table.Th>
             <Table.Th>Replacement</Table.Th>
             <Table.Th>Status</Table.Th>
@@ -104,6 +116,11 @@ export default function Replacements() {
               <Table.Td><Code>{l.ref}</Code></Table.Td>
               {isAdmin && <Table.Td>{l.affiliate_id?.name}</Table.Td>}
               <Table.Td>{l.replacement_requested_at ? dayjs(l.replacement_requested_at).format('DD MMM HH:mm') : '—'}</Table.Td>
+              <Table.Td>
+                <Badge color={l.replacement_reason === 'cooling_off' ? 'grape' : 'red'} variant="outline">
+                  {l.replacement_reason === 'cooling_off' ? '14-Day Cooling-Off' : 'Signature'}
+                </Badge>
+              </Table.Td>
               <Table.Td><SlaCell sla={l.sla} /></Table.Td>
               <Table.Td>{l.replaced_by_lead ? <Code>{l.replaced_by_lead.ref}</Code> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
               <Table.Td><StatusBadge field="replacement_status" value={l.replacement_status} /></Table.Td>
