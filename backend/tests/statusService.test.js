@@ -15,6 +15,9 @@ function freshLead() {
     payable_status: 'not_payable',
     needs_replacement: false,
     replaced_by_lead: null,
+    cancelled: false,
+    cancelled_at: undefined,
+    replacement_reason: undefined,
     amounts: { upfront_due: 0, confirmation_due: 0, total_due: 0 },
     history: [],
   };
@@ -103,4 +106,56 @@ test('a linked lead that was never required still becomes supplied (pre-feature 
   lead.replaced_by_lead = 'someObjectId';
   applyStatusChanges(lead, {}, rates, { source: 'manual' });
   assert.strictEqual(lead.replacement_status, 'supplied');
+});
+
+test('cooling-off cancellation opens an obligation with reason cooling_off and stamps cancelled_at once', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', search_status: 'virgin' }, rates, { source: 'import' });
+  assert.strictEqual(lead.payable_status, 'payable');
+  applyStatusChanges(lead, { cancelled: true }, rates, { source: 'webhook' });
+  assert.strictEqual(lead.cancelled, true);
+  assert.ok(lead.cancelled_at instanceof Date);
+  assert.strictEqual(lead.replacement_status, 'required');
+  assert.strictEqual(lead.replacement_reason, 'cooling_off');
+  assert.ok(lead.replacement_requested_at instanceof Date);
+  assert.strictEqual(lead.needs_replacement, true);
+  assert.strictEqual(lead.payable_status, 'not_payable');
+  assert.strictEqual(lead.amounts.total_due, 0);
+  const firstStamp = lead.cancelled_at;
+  const historyLen = lead.history.length;
+  applyStatusChanges(lead, { cancelled: true }, rates, { source: 'import' });
+  assert.strictEqual(lead.cancelled_at, firstStamp);
+  assert.strictEqual(lead.history.length, historyLen);
+});
+
+test('signature failure stamps replacement_reason signature', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', signature_status: 'failed' }, rates, { source: 'webhook' });
+  assert.strictEqual(lead.replacement_reason, 'signature');
+});
+
+test('first reason wins: cancellation after signature failure keeps reason signature', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', signature_status: 'failed' }, rates, { source: 'webhook' });
+  const clock = lead.replacement_requested_at;
+  applyStatusChanges(lead, { cancelled: true }, rates, { source: 'webhook' });
+  assert.strictEqual(lead.replacement_reason, 'signature');
+  assert.strictEqual(lead.replacement_requested_at, clock); // clock never resets
+  assert.ok(lead.cancelled_at instanceof Date); // cancellation still recorded
+});
+
+test('first reason wins: signature failure after cancellation keeps reason cooling_off', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', cancelled: true }, rates, { source: 'webhook' });
+  applyStatusChanges(lead, { signature_status: 'failed' }, rates, { source: 'webhook' });
+  assert.strictEqual(lead.replacement_reason, 'cooling_off');
+});
+
+test('reason survives supplied transition', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', cancelled: true }, rates, { source: 'webhook' });
+  lead.replaced_by_lead = 'someObjectId';
+  applyStatusChanges(lead, {}, rates, { source: 'api' });
+  assert.strictEqual(lead.replacement_status, 'supplied');
+  assert.strictEqual(lead.replacement_reason, 'cooling_off');
 });

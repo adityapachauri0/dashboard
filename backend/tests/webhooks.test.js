@@ -131,3 +131,20 @@ test('webhook rejecting a replacement lead reopens the original obligation', asy
   assert.strictEqual(after.replaced_by_lead, null);
   assert.strictEqual(after.replacement_requested_at.toISOString(), '2026-07-10T10:00:00.000Z');
 });
+
+test('webhook cancellation payloads open a cooling-off obligation', async () => {
+  for (const payload of [{ status: 'cancelled' }, { cancellation: 'cooling-off' }, { cancelled: true }]) {
+    await clearDB();
+    const { lead } = await seedLead();
+    const res = await request(createApp())
+      .post('/api/v1/webhooks/platform')
+      .send({ ref: lead.ref, ...payload });
+    assert.strictEqual(res.body.matched, true, JSON.stringify(payload));
+    const updated = await Lead.findOne({ ref: lead.ref });
+    assert.strictEqual(updated.cancelled, true, JSON.stringify(payload));
+    assert.ok(updated.cancelled_at instanceof Date);
+    assert.strictEqual(updated.replacement_status, 'required');
+    assert.strictEqual(updated.replacement_reason, 'cooling_off');
+    assert.strictEqual(updated.payable_status, 'not_payable');
+  }
+});

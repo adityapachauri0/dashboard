@@ -6,6 +6,7 @@ const UPDATABLE_FIELDS = [
   'search_status',
   'signature_status',
   'law_firm_confirmed',
+  'cancelled', // 14-day cooling-off; one-way from payloads, admin can undo manually
   'platform_ref',
   'possible_duplicate', // manual clear/set from the dashboard only
 ];
@@ -24,7 +25,16 @@ function applyStatusChanges(lead, changes, rateCard, { source, user } = {}) {
     lead[field] = to;
   }
 
-  if (lead.signature_status === 'failed' && !lead.needs_replacement) {
+  // Cooling-off cancellation: stamp the notification date once, never reset.
+  if (lead.cancelled && !lead.cancelled_at) {
+    record('cancelled_at', null, now);
+    lead.cancelled_at = now;
+  }
+
+  const obligationReason =
+    lead.signature_status === 'failed' ? 'signature' : lead.cancelled ? 'cooling_off' : null;
+
+  if (obligationReason && !lead.needs_replacement) {
     record('needs_replacement', false, true);
     lead.needs_replacement = true;
   }
@@ -32,9 +42,13 @@ function applyStatusChanges(lead, changes, rateCard, { source, user } = {}) {
   // Replacement lifecycle — own-lead transitions only. Cross-lead close/reopen
   // (replacement accepted/rejected) lives in replacementService.
   if (!lead.replacement_status) lead.replacement_status = 'none'; // plain objects / pre-backfill docs
-  if (lead.signature_status === 'failed' && lead.replacement_status === 'none') {
+  if (obligationReason && lead.replacement_status === 'none') {
     record('replacement_status', 'none', 'required');
     lead.replacement_status = 'required';
+    if (!lead.replacement_reason) {
+      record('replacement_reason', null, obligationReason);
+      lead.replacement_reason = obligationReason; // first reason wins, never overwritten
+    }
     if (!lead.replacement_requested_at) {
       record('replacement_requested_at', null, now);
       lead.replacement_requested_at = now; // 72h SLA clock — set once, never reset
