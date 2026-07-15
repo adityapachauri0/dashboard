@@ -150,3 +150,40 @@ test('export includes replacement columns with SLA label', async () => {
   assert.ok(row.includes('required'));
   assert.ok(row.includes('OVERDUE'));
 });
+
+test('export includes cancelled_at and replacement_reason columns', async () => {
+  const aff = await Affiliate.create({ name: 'H', lead_source: 'hhh' });
+  const admin = await User.create({ email: 'h@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  await Lead.create({
+    ref: 'KB-2026-000601', affiliate_id: aff._id, cancelled: true, cancelled_at: new Date('2026-07-15T10:00:00Z'),
+    replacement_status: 'required', replacement_reason: 'cooling_off',
+  });
+  await Lead.create({ ref: 'KB-2026-000602', affiliate_id: aff._id, replacement_status: 'required' }); // legacy
+  const res = await request(createApp()).get('/api/v1/dashboard/export.csv').set('Authorization', `Bearer ${signToken(admin)}`);
+  const [header, ...lines] = res.text.trim().split('\n');
+  assert.ok(header.includes('cancelled_at') && header.includes('replacement_reason'));
+  const row601 = lines.find((l) => l.includes('KB-2026-000601'));
+  assert.ok(row601.includes('2026-07-15T10:00:00.000Z') && row601.includes('cooling_off'));
+  const row602 = lines.find((l) => l.includes('KB-2026-000602'));
+  assert.ok(row602.includes('signature')); // legacy fallback
+});
+
+test('statement splits outstanding replacements by reason', async () => {
+  const aff = await Affiliate.create({ name: 'I', lead_source: 'iii' });
+  const admin = await User.create({ email: 'i@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  await Lead.create({ ref: 'KB-2026-000603', affiliate_id: aff._id, submitted_at: new Date('2026-07-05'), replacement_status: 'required', replacement_reason: 'cooling_off' });
+  await Lead.create({ ref: 'KB-2026-000604', affiliate_id: aff._id, submitted_at: new Date('2026-07-06'), replacement_status: 'required' });
+  const res = await request(createApp())
+    .get(`/api/v1/dashboard/statement.xlsx?affiliate_id=${aff._id}&month=2026-07`)
+    .set('Authorization', `Bearer ${signToken(admin)}`)
+    .buffer(true).parse((r, cb) => { const chunks = []; r.on('data', (c) => chunks.push(c)); r.on('end', () => cb(null, Buffer.concat(chunks))); });
+  assert.strictEqual(res.status, 200);
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(res.body);
+  const cells = [];
+  wb.getWorksheet('Statement').eachRow((row) => cells.push([row.getCell(1).value, row.getCell(6).value]));
+  assert.deepStrictEqual(cells.find(([a]) => a === 'OUTSTANDING REPLACEMENTS'), ['OUTSTANDING REPLACEMENTS', '2']);
+  assert.deepStrictEqual(cells.find(([a]) => a === '— Signature'), ['— Signature', '1']);
+  assert.deepStrictEqual(cells.find(([a]) => a === '— 14 Day Cooling-Off'), ['— 14 Day Cooling-Off', '1']);
+});

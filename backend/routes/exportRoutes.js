@@ -20,6 +20,7 @@ const COLUMNS = [
   'initial_status', 'rejection_reason', 'search_status', 'signature_status',
   'signature_deadline', 'law_firm_confirmed', 'payable_status',
   'replacement_status', 'replacement_requested_at', 'replacement_sla',
+  'replacement_reason', 'cancelled_at',
   'upfront_due', 'confirmation_due', 'total_due', 'platform_ref', 'last_updated',
 ];
 
@@ -44,6 +45,9 @@ async function fetchExportRows(query, user) {
     replacement_status: l.replacement_status || 'none',
     replacement_requested_at: l.replacement_requested_at?.toISOString() || '',
     replacement_sla: slaState(l)?.label || '',
+    replacement_reason:
+      l.replacement_status && l.replacement_status !== 'none' ? l.replacement_reason || 'signature' : '',
+    cancelled_at: l.cancelled_at?.toISOString() || '',
     upfront_due: l.amounts?.upfront_due ?? 0,
     confirmation_due: l.amounts?.confirmation_due ?? 0,
     total_due: l.amounts?.total_due ?? 0,
@@ -111,9 +115,12 @@ router.get('/dashboard/statement.xlsx', requireAuth, async (req, res) => {
     total_due: sum('total_due'),
   });
   totals.font = { bold: true };
-  const outstanding = rows.filter((r) => r.replacement_status === 'required').length;
-  const outRow = ws.addRow({ ref: 'OUTSTANDING REPLACEMENTS', applicant_name: String(outstanding) });
+  const isCooling = (r) => r.replacement_reason === 'cooling_off';
+  const outstanding = rows.filter((r) => r.replacement_status === 'required');
+  const outRow = ws.addRow({ ref: 'OUTSTANDING REPLACEMENTS', applicant_name: String(outstanding.length) });
   outRow.font = { bold: true };
+  ws.addRow({ ref: '— Signature', applicant_name: String(outstanding.filter((r) => !isCooling(r)).length) });
+  ws.addRow({ ref: '— 14 Day Cooling-Off', applicant_name: String(outstanding.filter(isCooling).length) });
 
   const buffer = await wb.xlsx.writeBuffer();
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

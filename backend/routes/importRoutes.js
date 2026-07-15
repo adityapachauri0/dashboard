@@ -13,7 +13,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 router.use('/imports', requireAuth, requireAdmin);
 
-const STATUS_FIELDS = ['initial_status', 'search_status', 'signature_status', 'law_firm_confirmed'];
+const STATUS_FIELDS = ['initial_status', 'search_status', 'signature_status', 'law_firm_confirmed', 'cancelled'];
 const TEXT_FIELDS = ['platform_ref', 'rejection_reason'];
 
 function parseCsv(buffer) {

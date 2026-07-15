@@ -73,3 +73,22 @@ test('apply updates matched leads, counts unmatched, saves record', async () => 
   const last = await request(app).get('/api/v1/imports/last-mapping').set('Authorization', `Bearer ${token}`);
   assert.deepStrictEqual(last.body, MAPPING);
 });
+
+test('import with a cancelled column opens a cooling-off obligation', async () => {
+  const aff = await Affiliate.create({ name: 'G', lead_source: 'ggg', rate_card: rates });
+  const lead = await Lead.create({ ref: 'KB-2026-000501', affiliate_id: aff._id, lead_source: 'ggg', applicant_name: 'Cancel Me' });
+  const admin = await User.create({ email: 'cancel-admin@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  const token = signToken(admin);
+  const csv = `ref,cancelled\n${lead.ref},cooling-off\n`;
+  const res = await request(createApp())
+    .post('/api/v1/imports')
+    .set('Authorization', `Bearer ${token}`)
+    .field('mapping', JSON.stringify({ match_by: 'ref', columns: { ref: 'ref', cancelled: 'cancelled' } }))
+    .attach('file', Buffer.from(csv), 'cancel.csv');
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.matched, 1);
+  const updated = await Lead.findById(lead._id);
+  assert.strictEqual(updated.cancelled, true);
+  assert.strictEqual(updated.replacement_status, 'required');
+  assert.strictEqual(updated.replacement_reason, 'cooling_off');
+});
