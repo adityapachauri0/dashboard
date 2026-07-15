@@ -23,19 +23,37 @@ export const LABELS = {
   searched: 'already searched',
 };
 
-// The "Payment status" dropdown mixes money statuses with the replacement
-// lifecycle; this maps each option to the query param the API expects.
+// Anthony's 8-option Payment Status (spec 2026-07-15). Replacement labels win
+// over money labels while an obligation exists; 'closed' renders as Supplied;
+// missing reason (legacy) = Signature.
+export function paymentStatus(l) {
+  const reason = l.replacement_reason === 'cooling_off' ? '14 Day Cooling-Off' : 'Signature';
+  if (l.replacement_status === 'required') return { label: `Replacement Required – ${reason}`, color: 'red' };
+  if (['supplied', 'closed'].includes(l.replacement_status)) return { label: `Replacement Supplied – ${reason}`, color: 'blue' };
+  if (l.payable_status === 'payable') return { label: 'Payable (100%)', color: 'green' };
+  if (l.payable_status === 'partial_pending_confirmation') return { label: 'Part-paid – Awaiting Law Firm', color: 'orange' };
+  if (l.payable_status === 'payable_full') return { label: 'Payable in Full', color: 'green' };
+  return { label: 'Not Payable', color: 'gray' };
+}
+
 export const PAYMENT_FILTER_OPTIONS = [
-  { value: 'not_payable', label: LABELS.not_payable },
-  { value: 'payable', label: LABELS.payable },
-  { value: 'partial_pending_confirmation', label: LABELS.partial_pending_confirmation },
-  { value: 'payable_full', label: LABELS.payable_full },
-  { value: 'replacement_required', label: 'replacement required' },
-  { value: 'replaced', label: 'replacement supplied' },
+  { value: 'not_payable', label: 'Not Payable' },
+  { value: 'payable', label: 'Payable (100%)' },
+  { value: 'partial_pending_confirmation', label: 'Part-paid – Awaiting Law Firm' },
+  { value: 'payable_full', label: 'Payable in Full' },
+  { value: 'replacement_required_signature', label: 'Replacement Required – Signature' },
+  { value: 'replacement_supplied_signature', label: 'Replacement Supplied – Signature' },
+  { value: 'replacement_required_cooling_off', label: 'Replacement Required – 14 Day Cooling-Off' },
+  { value: 'replacement_supplied_cooling_off', label: 'Replacement Supplied – 14 Day Cooling-Off' },
 ];
 export function paymentFilterToParams(value) {
   if (!value) return {};
-  if (value === 'replacement_required') return { replacement_status: 'required' };
+  if (value.startsWith('replacement_')) {
+    return {
+      replacement_status: value.includes('required') ? 'required' : 'supplied_or_closed',
+      replacement_reason: value.endsWith('cooling_off') ? 'cooling_off' : 'signature',
+    };
+  }
   return { payable_status: value };
 }
 
