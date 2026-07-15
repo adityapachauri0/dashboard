@@ -43,6 +43,13 @@ const leadSchema = new mongoose.Schema(
       index: true,
     },
     replacement_requested_at: Date,
+    // 14-day cooling-off cancellation (spec 2026-07-15). cancelled_at = when
+    // the notification arrived; stamped once in statusService, never reset.
+    cancelled: { type: Boolean, default: false },
+    cancelled_at: Date,
+    // Why the replacement is owed. Stamped when replacement_status first
+    // leaves 'none'; first reason wins. Missing (legacy) = 'signature'.
+    replacement_reason: { type: String, enum: ['signature', 'cooling_off'] },
     // Duplicate detection: normalized contact identity + flag (flag-only — the
     // lead is still accepted; an admin clears or acts on it from the dashboard)
     contact_email: { type: String, index: true },

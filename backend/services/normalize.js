@@ -22,6 +22,13 @@ const MAPS = {
     true: true, yes: true, confirmed: true, payable: true,
     false: false, no: false, unconfirmed: false,
   },
+  // 14-day cooling-off cancellation — truthy spellings only; false/unknown →
+  // undefined. Un-cancelling is a manual dashboard action, never a payload.
+  cancelled: {
+    cancelled: true, canceled: true, cancellation: true,
+    'cooling off': true, 'cooling-off': true, cooling_off: true, 'cooled off': true,
+    true: true, yes: true,
+  },
 };
 
 function normalizeField(field, raw) {
@@ -46,6 +53,7 @@ function canonicalFromPayload(p) {
   tryKeys('search_status', ['search_status', 'search_type', 'credit_search', 'search']);
   tryKeys('signature_status', ['signature_status', 'signature', 'signed', 'esign']);
   tryKeys('law_firm_confirmed', ['law_firm_confirmed', 'confirmed', 'payable_confirmed', 'confirmation']);
+  tryKeys('cancelled', ['cancelled', 'canceled', 'cancellation', 'cancellation_status', 'status', 'result', 'outcome']);
   const reason = p.rejection_reason || p.reason || p.reject_reason;
   if (reason) out.rejection_reason = String(reason);
   return out;
