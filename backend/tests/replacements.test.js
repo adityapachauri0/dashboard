@@ -32,7 +32,15 @@ test('admin sees all obligations with counts and SLA', async () => {
   const res = await request(createApp()).get('/api/v1/dashboard/replacements').set('Authorization', `Bearer ${signToken(admin)}`);
   assert.strictEqual(res.status, 200);
   assert.strictEqual(res.body.rows.length, 3);
-  assert.deepStrictEqual(res.body.counts, { required: 2, supplied: 1, closed: 0, overdue: 1 });
+  // all seeded leads here predate replacement_reason → legacy fallback puts them all under 'signature'
+  assert.deepStrictEqual(res.body.counts, {
+    required: 2,
+    supplied: 1,
+    closed: 0,
+    overdue: 1,
+    signature: { required: 2, supplied: 1, closed: 0, overdue: 1 },
+    cooling_off: { required: 0, supplied: 0, closed: 0, overdue: 0 },
+  });
   const overdueRow = res.body.rows.find((r) => r.ref === 'KB-2026-000051');
   assert.strictEqual(overdueRow.sla.label, 'OVERDUE');
   const freshRow = res.body.rows.find((r) => r.ref === 'KB-2026-000052');
@@ -54,5 +62,33 @@ test('affiliate users only see their own obligations', async () => {
   const res = await request(createApp()).get('/api/v1/dashboard/replacements').set('Authorization', `Bearer ${signToken(affUser)}`);
   assert.strictEqual(res.body.rows.length, 2);
   assert.ok(res.body.rows.every((r) => r.ref.startsWith('KB-2026-00005') && r.ref !== 'KB-2026-000053'));
-  assert.deepStrictEqual(res.body.counts, { required: 2, supplied: 0, closed: 0, overdue: 1 });
+  assert.deepStrictEqual(res.body.counts, {
+    required: 2,
+    supplied: 0,
+    closed: 0,
+    overdue: 1,
+    signature: { required: 2, supplied: 0, closed: 0, overdue: 1 },
+    cooling_off: { required: 0, supplied: 0, closed: 0, overdue: 0 },
+  });
+});
+
+test('replacements endpoint returns per-reason counts and reason on rows', async () => {
+  const admin = await User.create({ email: 'admin@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  const app = createApp();
+  const auth = { Authorization: `Bearer ${signToken(admin)}` };
+  const aff = await Affiliate.create({ name: 'A', lead_source: 'aaa' });
+  await Lead.create({ ref: 'KB-2026-000501', affiliate_id: aff._id, replacement_status: 'required', replacement_reason: 'cooling_off', replacement_requested_at: new Date() });
+  await Lead.create({ ref: 'KB-2026-000502', affiliate_id: aff._id, replacement_status: 'required', replacement_requested_at: new Date() }); // legacy → signature
+
+  const res = await request(app).get('/api/v1/dashboard/replacements').set(auth);
+  assert.strictEqual(res.body.counts.required, 2);
+  assert.strictEqual(res.body.counts.cooling_off.required, 1);
+  assert.strictEqual(res.body.counts.signature.required, 1);
+  const reasons = Object.fromEntries(res.body.rows.map((r) => [r.ref, r.replacement_reason]));
+  assert.strictEqual(reasons['KB-2026-000501'], 'cooling_off');
+  assert.strictEqual(reasons['KB-2026-000502'], 'signature');
+
+  const filtered = await request(app).get('/api/v1/dashboard/replacements?replacement_reason=cooling_off').set(auth);
+  assert.deepStrictEqual(filtered.body.rows.map((r) => r.ref), ['KB-2026-000501']);
+  assert.strictEqual(filtered.body.counts.required, 2); // counts ignore filters (existing behaviour)
 });

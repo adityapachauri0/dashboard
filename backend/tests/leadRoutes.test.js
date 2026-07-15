@@ -103,3 +103,20 @@ test('PATCH replaces_ref rejects non-string (injection guard)', async () => {
     .send({ replaces_ref: { $ne: null } });
   assert.strictEqual(res.status, 400);
 });
+
+test('leads list filters by replacement_reason with legacy signature fallback', async () => {
+  const { admin } = await seed();
+  const app = createApp();
+  const auth = { Authorization: `Bearer ${signToken(admin)}` };
+  const aff = await Affiliate.create({ name: 'A2', lead_source: 'aaa2', rate_card: rates });
+  await Lead.create({ ref: 'KB-2026-000401', affiliate_id: aff._id, replacement_status: 'required', replacement_reason: 'cooling_off' });
+  await Lead.create({ ref: 'KB-2026-000402', affiliate_id: aff._id, replacement_status: 'required', replacement_reason: 'signature' });
+  await Lead.create({ ref: 'KB-2026-000403', affiliate_id: aff._id, replacement_status: 'supplied' }); // legacy, no reason
+  await Lead.create({ ref: 'KB-2026-000404', affiliate_id: aff._id }); // no obligation
+
+  const cooling = await request(app).get('/api/v1/dashboard/leads?replacement_reason=cooling_off').set(auth);
+  assert.deepStrictEqual(cooling.body.rows.map((r) => r.ref), ['KB-2026-000401']);
+
+  const sig = await request(app).get('/api/v1/dashboard/leads?replacement_reason=signature&replacement_status=supplied_or_closed').set(auth);
+  assert.deepStrictEqual(sig.body.rows.map((r) => r.ref), ['KB-2026-000403']);
+});

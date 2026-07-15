@@ -19,6 +19,14 @@ function buildLeadFilter(query, user) {
   if (['required', 'supplied', 'closed'].includes(query.replacement_status)) {
     filter.replacement_status = query.replacement_status;
   }
+  // Anthony's payment list folds 'closed' into Supplied
+  if (query.replacement_status === 'supplied_or_closed') {
+    filter.replacement_status = { $in: ['supplied', 'closed'] };
+  }
+  // signature also matches legacy rows from before the reason existed
+  // ($in with null matches missing fields)
+  if (query.replacement_reason === 'signature') filter.replacement_reason = { $in: ['signature', null] };
+  if (query.replacement_reason === 'cooling_off') filter.replacement_reason = 'cooling_off';
   // "Next update" mirrors the Leads-page column: what is this lead waiting on?
   if (query.next_update === 'awaiting_confirmation') filter.payable_status = 'partial_pending_confirmation';
   if (query.next_update === 'replacement_required') filter.replacement_status = 'required';
