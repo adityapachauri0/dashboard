@@ -17,13 +17,10 @@ async function main() {
       email: email.toLowerCase(),
       password_hash: bcrypt.hashSync(password, 10),
       role: 'admin',
-      // reset 2FA — re-running this script is the lockout recovery path
-      totp_secret: null,
-      totp_enabled: false,
     },
     { upsert: true }
   );
-  console.log(`Admin ${email} ready (2FA reset — next login re-enrols)`);
+  console.log(`Admin ${email} ready`);
   process.exit(0);
 }
 main();
