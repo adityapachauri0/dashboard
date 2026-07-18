@@ -5,6 +5,8 @@ const affiliateSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     brands: [String],
     lead_source: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    contact_name: { type: String, trim: true },
+    contact_email: { type: String, trim: true, lowercase: true },
     api_key_hash: { type: String, index: true },
     api_key_prefix: String,
     rate_card: {

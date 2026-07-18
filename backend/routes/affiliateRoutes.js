@@ -14,11 +14,11 @@ router.get('/affiliates', async (req, res) => {
 });
 
 router.post('/affiliates', async (req, res) => {
-  const { name, lead_source, brands, rate_card } = req.body || {};
+  const { name, lead_source, brands, rate_card, contact_name, contact_email } = req.body || {};
   if (!name || !lead_source) return res.status(400).json({ error: 'name and lead_source required' });
   const { key, hash, prefix } = generateApiKey();
   try {
-    const affiliate = await Affiliate.create({ name, lead_source, brands, rate_card, api_key_hash: hash, api_key_prefix: prefix });
+    const affiliate = await Affiliate.create({ name, lead_source, brands, rate_card, contact_name, contact_email, api_key_hash: hash, api_key_prefix: prefix });
     const safe = affiliate.toObject();
     delete safe.api_key_hash;
     res.status(201).json({ affiliate: safe, api_key: key });
@@ -30,7 +30,7 @@ router.post('/affiliates', async (req, res) => {
 
 router.patch('/affiliates/:id', async (req, res) => {
   const allowed = {};
-  for (const f of ['name', 'brands', 'active']) {
+  for (const f of ['name', 'brands', 'active', 'contact_name', 'contact_email']) {
     if (f in req.body) allowed[f] = req.body[f];
   }
   if (req.body.rate_card) {

@@ -84,3 +84,15 @@ test('partial rate_card PATCH preserves other rates', async () => {
   assert.strictEqual(res.body.rate_card.searched_upfront_rate, 15);
   assert.strictEqual(res.body.rate_card.searched_confirmation_rate, 25);
 });
+
+test('contact fields settable on create and patch', async () => {
+  const app = createApp();
+  const token = await adminToken();
+  const created = await request(app).post('/api/v1/affiliates').set('Authorization', `Bearer ${token}`)
+    .send({ name: 'C3K', lead_source: 'claim3000', contact_name: 'Ali', contact_email: 'ali@claim3000.co.uk' });
+  assert.strictEqual(created.body.affiliate.contact_email, 'ali@claim3000.co.uk');
+  const patched = await request(app).patch(`/api/v1/affiliates/${created.body.affiliate._id}`)
+    .set('Authorization', `Bearer ${token}`).send({ contact_name: 'Ali B' });
+  assert.strictEqual(patched.body.contact_name, 'Ali B');
+  assert.strictEqual(patched.body.contact_email, 'ali@claim3000.co.uk');
+});
