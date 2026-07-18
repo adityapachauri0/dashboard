@@ -8,6 +8,9 @@ const safe = (v) => {
 };
 const iso = (d) => (d ? new Date(d).toISOString() : '');
 const category = (l) => (l.search_status === 'virgin' ? LINE_VIRGIN : LINE_SEARCHED);
+// 'unknown' search_status is neither billable nor summarisable — drop it here so every
+// tab built from a lead list reconciles regardless of what the caller passed in.
+const knownStatus = (l) => l.search_status === 'virgin' || l.search_status === 'searched';
 
 function sheet(wb, name, columns) {
   const ws = wb.addWorksheet(name);
@@ -16,7 +19,8 @@ function sheet(wb, name, columns) {
   return ws;
 }
 
-async function buildBlueLionWorkbook(leads) {
+async function buildBlueLionWorkbook(allLeads) {
+  const leads = allLeads.filter(knownStatus);
   const rates = bluelionRates();
   const wb = new ExcelJS.Workbook();
   const ws = sheet(wb, 'Leads', [
@@ -26,17 +30,18 @@ async function buildBlueLionWorkbook(leads) {
   const byAff = new Map();
   for (const l of leads) {
     const name = l.affiliate_id?.name || 'unknown';
+    const id = String(l.affiliate_id?._id ?? l.affiliate_id ?? 'unknown');
     ws.addRow([safe(l.ref), iso(l.submitted_at), safe(name), l.search_status,
       PAY_LABELS[l.payable_status] || l.payable_status, category(l),
       l.search_status === 'virgin' ? rates.virgin : rates.searched]);
-    const a = byAff.get(name) || { virgin: 0, searched: 0 };
+    const a = byAff.get(id) || { name, virgin: 0, searched: 0 };
     a[l.search_status] += 1;
-    byAff.set(name, a);
+    byAff.set(id, a);
   }
   const sum = sheet(wb, 'Affiliate Summary', [['Affiliate', 24], ['Non Search', 12], ['Previous Search', 15], ['Total', 10]]);
   let tv = 0, ts = 0;
-  for (const [name, a] of [...byAff.entries()].sort((x, y) => x[0].localeCompare(y[0]))) {
-    sum.addRow([safe(name), a.virgin, a.searched, a.virgin + a.searched]);
+  for (const a of [...byAff.values()].sort((x, y) => x.name.localeCompare(y.name))) {
+    sum.addRow([safe(a.name), a.virgin, a.searched, a.virgin + a.searched]);
     tv += a.virgin; ts += a.searched;
   }
   const totalRow = sum.addRow(['TOTAL', tv, ts, tv + ts]);
@@ -54,7 +59,7 @@ async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, s
     ['Lead Reference', 20], ['Submission Date', 22], ['Search Status', 14],
     ['Payment Status', 28], ['Invoice Category', 34], ['Value', 10],
   ]);
-  for (const l of dayLeads) {
+  for (const l of dayLeads.filter(knownStatus)) {
     pay.addRow([safe(l.ref), iso(l.submitted_at), l.search_status,
       PAY_LABELS[l.payable_status] || l.payable_status, category(l),
       l.search_status === 'virgin' ? rc.virgin_rate || 0 : rc.searched_upfront_rate || 0]);

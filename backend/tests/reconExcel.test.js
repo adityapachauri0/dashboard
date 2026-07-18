@@ -5,7 +5,7 @@ const { buildBlueLionWorkbook, buildAffiliateWorkbook } = require('../services/r
 
 const lead = (over = {}) => ({
   ref: 'KB-2026-000001', submitted_at: new Date('2026-07-18T10:00:00Z'),
-  affiliate_id: { name: 'Claim3000', rate_card: { virgin_rate: 40, searched_upfront_rate: 15 } },
+  affiliate_id: { _id: 'aff-claim3000', name: 'Claim3000', rate_card: { virgin_rate: 40, searched_upfront_rate: 15 } },
   search_status: 'virgin', payable_status: 'payable', ...over,
 });
 
@@ -54,6 +54,44 @@ test('affiliate workbook: four tabs, affiliate rates, 72h deadline', async () =>
   assert.strictEqual(req.getRow(2).getCell(4).value, new Date('2026-07-21T09:00:00Z').toISOString());
   const sup = wb.getWorksheet('Replacements Supplied');
   assert.strictEqual(sup.getRow(2).getCell(2).value, 'KB-2026-000011');
+});
+
+test('bluelion workbook: unknown search_status excluded from Leads and Affiliate Summary', async () => {
+  const buf = await buildBlueLionWorkbook([
+    lead(),
+    lead({ ref: 'KB-2026-000002', search_status: 'unknown' }),
+  ]);
+  const wb = await load(buf);
+  const leads = wb.getWorksheet('Leads');
+  assert.strictEqual(leads.rowCount, 2); // header + 1 (unknown excluded)
+  const summary = wb.getWorksheet('Affiliate Summary');
+  const rows = [];
+  summary.eachRow((r) => rows.push(r.values.slice(1)));
+  assert.deepStrictEqual(rows.at(-1), ['TOTAL', 1, 0, 1]);
+});
+
+test('affiliate workbook: unknown search_status excluded from Payable Leads', async () => {
+  const buf = await buildAffiliateWorkbook({
+    affiliate: { name: 'Claim3000', rate_card: { virgin_rate: 40, searched_upfront_rate: 15 } },
+    dayLeads: [lead(), lead({ ref: 'KB-2026-000002', search_status: 'unknown' })],
+    openReplacements: [], suppliedReplacements: [], confirmedLeads: [],
+  });
+  const wb = await load(buf);
+  const pay = wb.getWorksheet('Payable Leads');
+  assert.strictEqual(pay.rowCount, 2); // header + 1 (unknown excluded)
+});
+
+test('bluelion workbook: affiliate summary grouped by id, not display name', async () => {
+  const buf = await buildBlueLionWorkbook([
+    lead({ affiliate_id: { _id: 'aff1', name: 'Claim3000' } }),
+    lead({ ref: 'KB-2026-000002', affiliate_id: { _id: 'aff2', name: 'Claim3000' } }),
+  ]);
+  const wb = await load(buf);
+  const summary = wb.getWorksheet('Affiliate Summary');
+  const rows = [];
+  summary.eachRow((r) => rows.push(r.values.slice(1)));
+  const claim3000Rows = rows.filter((r) => r[0] === 'Claim3000');
+  assert.strictEqual(claim3000Rows.length, 2);
 });
 
 test('formula injection neutralised in text cells', async () => {
