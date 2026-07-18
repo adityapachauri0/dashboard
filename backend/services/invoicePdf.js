@@ -3,7 +3,27 @@ const path = require('path');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const { money, gbp, ddmmyyyy } = require('./invoiceService');
 
-const TEMPLATE = path.join(__dirname, '..', 'assets', 'invoice-template-bluelion.pdf');
+// The background is a flattened raster of the template, not the template PDF
+// itself. Using the live PDF page (with wipe-and-overlay stamping) leaves the
+// original text objects in the content stream, so copy/paste and AP-automation
+// extraction see both the old and new figures on top of each other. Baking
+// the template to an image removes that text layer entirely — pdftotext can
+// no longer read the sample figures the template PDF ships with, because
+// they're pixels, not text objects.
+//
+// The template PDF is itself a filled-in sample invoice (BlueLion 001 etc.),
+// not a blank form, so those sample figures are still visible as pixels in
+// the raster. We still draw white rectangles to visually cover them before
+// stamping the real values — same as before, just covering image pixels
+// instead of vector text. That keeps the page looking clean without
+// reintroducing any extractable old text.
+//
+// assets/invoice-template-bluelion.pdf remains the source of truth. Regenerate
+// the PNG whenever the template changes:
+//   pdftoppm -r 300 -png -singlefile assets/invoice-template-bluelion.pdf assets/invoice-template-bluelion
+const TEMPLATE_PNG = path.join(__dirname, '..', 'assets', 'invoice-template-bluelion.png');
+const PAGE_WIDTH = 594.95996;
+const PAGE_HEIGHT = 841.91998;
 
 // Stamp coordinates in PDF points (origin bottom-left), calibrated against the
 // client-approved template via scripts/renderSampleInvoice.js. If the template
@@ -19,11 +39,19 @@ const C = {
 };
 
 async function renderInvoicePdf(invoice) {
-  const pdf = await PDFDocument.load(fs.readFileSync(TEMPLATE));
-  const page = pdf.getPage(0);
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  const bg = await pdf.embedPng(fs.readFileSync(TEMPLATE_PNG));
+  page.drawImage(bg, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
+
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
+  // The template PDF we rasterized is itself a filled-in sample invoice, so
+  // its sample figures are baked into the background image as pixels. These
+  // rectangles cover those pixels before we stamp the real values — nothing
+  // here covers text (there is none on this layer), only image pixels, so no
+  // hidden/contradictory text objects are ever introduced.
   const wipe = (x, y, w, h = 13) => page.drawRectangle({ x, y: y - 3, width: w, height: h, color: rgb(1, 1, 1) });
   const text = (s, x, y, { f = font, size = C.size } = {}) =>
     page.drawText(String(s), { x, y, font: f, size, color: rgb(0, 0, 0) });
