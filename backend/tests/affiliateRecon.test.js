@@ -1,6 +1,7 @@
 // backend/tests/affiliateRecon.test.js
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
+const ExcelJS = require('exceljs');
 const { setupDB, teardownDB, clearDB } = require('./helpers');
 const Affiliate = require('../models/Affiliate');
 const Lead = require('../models/Lead');
@@ -56,6 +57,34 @@ test('replacement obligation opened yesterday triggers email even with no leads'
   const recons = await buildAffiliateRecons(NOW);
   assert.strictEqual(recons.length, 1);
   assert.match(recons[0].text, /Fully Payable Leads: 0/);
+});
+
+test('suppliedReplacements window anchors on last_updated (resolution time), not replacement_requested_at (open time)', async () => {
+  const a = await mkAff('Claim3000', 'ali@claim3000.co.uk');
+  await mkLead(a); // billable lead yesterday — ensures a recon is built
+
+  const requestedAt = new Date(NOW.getTime() - 40 * 24 * 3600 * 1000); // opened 40d ago
+  const supplied = await mkLead(a, {
+    replacement_status: 'supplied', replacement_reason: 'signature',
+    replacement_requested_at: requestedAt,
+  });
+  // Pin last_updated (resolution/supplied time) to 5 days before NOW, inside the
+  // 30-day window, independent of the real wall clock (timestamps:false trick).
+  await Lead.updateOne(
+    { _id: supplied._id },
+    { $set: { last_updated: new Date(NOW.getTime() - 5 * 24 * 3600 * 1000) } },
+    { timestamps: false }
+  );
+
+  const recons = await buildAffiliateRecons(NOW);
+  assert.strictEqual(recons.length, 1);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(recons[0].xlsx);
+  const sup = wb.getWorksheet('Replacements Supplied');
+  const refs = [];
+  sup.eachRow((r, i) => { if (i > 1) refs.push(r.getCell(1).value); });
+  assert.ok(refs.includes(supplied.ref),
+    'replacement resolved 5 days ago should appear despite being requested 40 days ago');
 });
 
 test('already-sent day (ReconSend row) is not rebuilt', async () => {

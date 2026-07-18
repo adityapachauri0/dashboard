@@ -77,9 +77,13 @@ async function buildAffiliateRecons(now = new Date()) {
 
     const openReplacements = await Lead.find({ affiliate_id: a._id, replacement_status: 'required' })
       .sort({ replacement_requested_at: 1 }).lean();
+    // Bounded on last_updated (resolution time), not replacement_requested_at
+    // (open time): Lead has no dedicated supplied-at field, and last_updated
+    // (Mongoose updatedAt) is stamped when replacement_status transitions to
+    // supplied/closed, so it approximates when the replacement was resolved.
     const suppliedReplacements = await Lead.find({
       affiliate_id: a._id, replacement_status: { $in: ['supplied', 'closed'] },
-      replacement_requested_at: { $gte: new Date(now.getTime() - 30 * 24 * 3600 * 1000) },
+      last_updated: { $gte: new Date(now.getTime() - 30 * 24 * 3600 * 1000) },
     }).populate('replaced_by_lead', 'ref').lean();
     const confirmedLeads = await Lead.find({
       affiliate_id: a._id, payable_status: 'payable_full',
