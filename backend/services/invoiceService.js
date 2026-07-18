@@ -85,11 +85,22 @@ async function generateDailyInvoice(now = new Date()) {
   const { counts, calc, leads } = await previewDailyInvoice(now);
   if (!leads.length) return { invoice: null, created: false, leads: [] };
   const { seq, number } = await nextInvoiceNumber();
-  const invoice = await Invoice.create({
-    number, seq, type: 'daily', period_start: day, period_end: day, invoice_date: now,
-    lines: calc.lines, net: calc.net, vat: calc.vat, gross: calc.gross,
-    email_to: process.env.INVOICE_TO_EMAIL || '',
-  });
+  let invoice;
+  try {
+    invoice = await Invoice.create({
+      number, seq, type: 'daily', period_start: day, period_end: day, invoice_date: now,
+      lines: calc.lines, net: calc.net, vat: calc.vat, gross: calc.gross,
+      email_to: process.env.INVOICE_TO_EMAIL || '',
+    });
+  } catch (err) {
+    // ponytail: lost the race to a concurrent invocation for the same day — fall back to
+    // the winner's doc instead of transactions/locking.
+    if (err.code === 11000) {
+      const raced = await Invoice.findOne({ type: 'daily', period_end: day });
+      return { invoice: raced, created: false, leads: null };
+    }
+    throw err;
+  }
   return { invoice, created: true, leads };
 }
 

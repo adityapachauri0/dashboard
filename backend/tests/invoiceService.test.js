@@ -88,3 +88,33 @@ test('generateDailyInvoice numbers sequentially, idempotent, zero-day null', asy
   assert.strictEqual(again.invoice._id.toString(), first.invoice._id.toString());
   assert.strictEqual(await Invoice.countDocuments(), 1);
 });
+
+test('generateDailyInvoice returns the existing invoice when create loses a duplicate-key race', async () => {
+  await seed({});
+  // Simulate a concurrent request that already won: the invoice for this period exists in the DB.
+  // Uses a different number/seq than the Counter will hand out below, so the E11000 below is
+  // unambiguously the (type, period_end) unique index, not the (number) one.
+  const winner = await Invoice.create({
+    number: 'BlueLion 002', seq: 2, type: 'daily', period_start: '2026-07-18', period_end: '2026-07-18',
+    invoice_date: NOW, lines: [], net: 0, vat: 0, gross: 0, email_to: '',
+  });
+
+  // Force the pre-check findOne to miss once (the race window), so generateDailyInvoice proceeds
+  // to Invoice.create and collides with `winner` on the unique (type, period_end) index. The
+  // recovery findOne inside the fix must hit real data, so only the first call is stubbed.
+  const realFindOne = Invoice.findOne.bind(Invoice);
+  let first = true;
+  Invoice.findOne = (...args) => {
+    if (first) { first = false; return Promise.resolve(null); }
+    return realFindOne(...args);
+  };
+  try {
+    const result = await svc.generateDailyInvoice(NOW);
+    assert.strictEqual(result.created, false);
+    assert.strictEqual(result.leads, null);
+    assert.strictEqual(result.invoice._id.toString(), winner._id.toString());
+    assert.strictEqual(await Invoice.countDocuments(), 1);
+  } finally {
+    Invoice.findOne = realFindOne;
+  }
+});
