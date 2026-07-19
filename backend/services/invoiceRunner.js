@@ -164,4 +164,4 @@ async function runDaily(now = new Date(), { send = sendAccountsMail } = {}) {
   return summary;
 }
 
-module.exports = { runDaily, invoiceEmail };
+module.exports = { runDaily, invoiceEmail, recipients };

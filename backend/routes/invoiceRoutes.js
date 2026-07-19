@@ -4,6 +4,9 @@ const fs = require('fs');
 const Invoice = require('../models/Invoice');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { STORAGE_DIR } = require('../services/invoiceService');
+const { invoiceEmail, recipients } = require('../services/invoiceRunner');
+// property access (not destructured) so tests can stub sendAccountsMail
+const mailer = require('../services/mailer');
 
 const router = express.Router();
 router.use('/invoices', requireAuth, requireAdmin);
@@ -45,24 +48,24 @@ router.post('/invoices/:id/resend', async (req, res) => {
   const inv = await Invoice.findById(req.params.id);
   if (!inv) return res.status(404).json({ error: 'not found' });
   if (!inv.pdf_file || !inv.xlsx_file) return res.status(409).json({ error: 'artifacts not stored' });
-  const { invoiceEmail } = require('../services/invoiceRunner');
-  const { sendAccountsMail } = require('../services/mailer');
   const { subject, text, html } = invoiceEmail(inv);
-  const to = process.env.INVOICE_TO_EMAIL || process.env.INVOICE_CC || process.env.DIGEST_TO;
+  const { to, cc } = recipients();
   try {
-    await sendAccountsMail({
-      to, subject, text, html,
+    await mailer.sendAccountsMail({
+      to, cc, subject, text, html,
       attachments: [
         { filename: `Invoice ${inv.number}.pdf`, path: path.join(STORAGE_DIR, path.basename(inv.pdf_file)) },
         { filename: `Reconciliation ${inv.number}.xlsx`, path: path.join(STORAGE_DIR, path.basename(inv.xlsx_file)) },
       ],
     });
     inv.email_to = to; inv.email_status = 'sent'; inv.sent_at = new Date(); inv.email_error = undefined;
+    await inv.save();
+    return res.json(inv);
   } catch (e) {
     inv.email_status = 'failed'; inv.email_error = e.message;
+    await inv.save();
+    return res.status(502).json({ error: `send failed: ${e.message}`, invoice: inv });
   }
-  await inv.save();
-  res.json(inv);
 });
 
 module.exports = router;
