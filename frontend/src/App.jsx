@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink as RouterNavLink, useLocation } from 'react-router-dom';
 import { AppShell, NavLink, Group, Button, Text, Box } from '@mantine/core';
-import { IconLayoutDashboard, IconUsers, IconAffiliate, IconFileImport, IconFileExport, IconReplace } from '@tabler/icons-react';
+import { IconLayoutDashboard, IconUsers, IconAffiliate, IconFileImport, IconFileExport, IconReplace, IconFileInvoice } from '@tabler/icons-react';
 import { getUser, logout } from './api';
 import Login from './pages/Login';
 import Summary from './pages/Summary';
@@ -9,6 +9,7 @@ import Affiliates from './pages/Affiliates';
 import Imports from './pages/Imports';
 import ExportPage from './pages/ExportPage';
 import Replacements from './pages/Replacements';
+import Invoices from './pages/Invoices';
 
 const ICONS = {
   '/': IconLayoutDashboard,
@@ -17,6 +18,7 @@ const ICONS = {
   '/imports': IconFileImport,
   '/export': IconFileExport,
   '/replacements': IconReplace,
+  '/invoices': IconFileInvoice,
 };
 
 function Shell({ children }) {
@@ -27,7 +29,7 @@ function Shell({ children }) {
     { to: '/leads', label: 'Leads' },
     { to: '/replacements', label: 'Replacements' },
     ...(user.role === 'admin'
-      ? [{ to: '/affiliates', label: 'Affiliates' }, { to: '/imports', label: 'Imports' }]
+      ? [{ to: '/affiliates', label: 'Affiliates' }, { to: '/imports', label: 'Imports' }, { to: '/invoices', label: 'Invoices' }]
       : []),
     { to: '/export', label: 'Export' },
   ];
@@ -69,6 +71,7 @@ export default function App() {
         <Route path="/replacements" element={<RequireAuth><Replacements /></RequireAuth>} />
         <Route path="/affiliates" element={<RequireAuth><Affiliates /></RequireAuth>} />
         <Route path="/imports" element={<RequireAuth><Imports /></RequireAuth>} />
+        <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
         <Route path="/export" element={<RequireAuth><ExportPage /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
