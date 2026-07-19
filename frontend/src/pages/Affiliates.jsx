@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { api } from '../api';
 
-const emptyForm = { name: '', lead_source: '', brands: [], rate_card: { virgin_rate: 0, searched_upfront_rate: 0, searched_confirmation_rate: 0 } };
+const emptyForm = { name: '', lead_source: '', brands: [], contact_name: '', contact_email: '', rate_card: { virgin_rate: 0, searched_upfront_rate: 0, searched_confirmation_rate: 0 } };
 
 export default function Affiliates() {
   const [affiliates, setAffiliates] = useState([]);
@@ -85,7 +85,7 @@ export default function Affiliates() {
                 <Table.Td>{a.active ? 'yes' : 'no'}</Table.Td>
                 <Table.Td>
                   <Group gap={4}>
-                    <Button size="compact-xs" variant="default" onClick={() => { setForm({ name: a.name, brands: a.brands || [], rate_card: { ...a.rate_card }, active: a.active }); setModal({ mode: 'edit', affiliate: a }); }}>Edit</Button>
+                    <Button size="compact-xs" variant="default" onClick={() => { setForm({ name: a.name, brands: a.brands || [], contact_name: a.contact_name || '', contact_email: a.contact_email || '', rate_card: { ...a.rate_card }, active: a.active }); setModal({ mode: 'edit', affiliate: a }); }}>Edit</Button>
                     <Button size="compact-xs" variant="default" onClick={() => rotate(a)}>Rotate key</Button>
                     <Button size="compact-xs" variant="default" onClick={() => setModal({ mode: 'user', affiliate: a })}>Add login</Button>
                   </Group>
@@ -99,6 +99,8 @@ export default function Affiliates() {
       <Modal opened={!!modal && modal.mode !== 'user'} onClose={() => setModal(null)} title={modal?.mode === 'create' ? 'New affiliate' : `Edit ${modal?.affiliate?.name}`}>
         <Stack>
           <TextInput label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
+          <TextInput label="Contact name" description="used in reconciliation email greeting" value={form.contact_name} onChange={(e) => setForm((f) => ({ ...f, contact_name: e.target.value }))} />
+          <TextInput label="Contact email" description="daily reconciliation email recipient — leave empty to disable" value={form.contact_email} onChange={(e) => setForm((f) => ({ ...f, contact_email: e.target.value }))} />
           {modal?.mode === 'create' && (
             <TextInput label="Lead source slug" description="lowercase, unique — used in shared-key submissions" value={form.lead_source} onChange={(e) => setForm((f) => ({ ...f, lead_source: e.target.value }))} required />
           )}
