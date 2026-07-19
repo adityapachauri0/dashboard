@@ -27,7 +27,7 @@ async function main() {
   await connectDB();
 
   if (dryRun) {
-    const { previewDailyInvoice, bluelionRates, money } = require('../services/invoiceService');
+    const { previewDailyInvoice, money } = require('../services/invoiceService');
     const { renderInvoicePdf } = require('../services/invoicePdf');
     const { buildBlueLionWorkbook } = require('../services/reconExcel');
     const { buildAffiliateRecons } = require('../services/affiliateRecon');

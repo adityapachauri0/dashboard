@@ -93,3 +93,22 @@ test('already-sent day (ReconSend row) is not rebuilt', async () => {
   await ReconSend.create({ affiliate_id: a._id, day: '2026-07-18', sent_at: new Date() });
   assert.strictEqual((await buildAffiliateRecons(NOW)).length, 0);
 });
+
+test('3-day lookback: day-2 (2026-07-17) is backfilled when no ReconSend row exists for it', async () => {
+  const a = await mkAff('Claim3000', 'ali@claim3000.co.uk');
+  await mkLead(a, { submitted_at: new Date('2026-07-17T10:00:00Z') });
+  await mkLead(a, { submitted_at: new Date('2026-07-17T11:00:00Z'), search_status: 'searched' });
+  const recons = await buildAffiliateRecons(NOW);
+  const forD = recons.find((r) => r.day === '2026-07-17');
+  assert.ok(forD, 'day-2 recon should be built (no ReconSend row for that day yet)');
+  assert.match(forD.text, /Fully Payable Leads: 1/);
+  assert.match(forD.text, /Part-Payable Leads: 1/);
+});
+
+test('3-day lookback: day-2 (2026-07-17) is NOT rebuilt once a ReconSend row exists for it', async () => {
+  const a = await mkAff('Claim3000', 'ali@claim3000.co.uk');
+  await mkLead(a, { submitted_at: new Date('2026-07-17T10:00:00Z') });
+  await ReconSend.create({ affiliate_id: a._id, day: '2026-07-17', sent_at: new Date() });
+  const recons = await buildAffiliateRecons(NOW);
+  assert.ok(!recons.some((r) => r.day === '2026-07-17'));
+});

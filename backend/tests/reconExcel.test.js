@@ -51,7 +51,7 @@ test('affiliate workbook: four tabs, affiliate rates, 72h deadline', async () =>
   assert.strictEqual(pay.getRow(3).getCell(6).value, 15);  // searched at affiliate rate
   const req = wb.getWorksheet('Replacements Required');
   assert.strictEqual(req.getRow(2).getCell(2).value, 'cooling_off');
-  assert.strictEqual(req.getRow(2).getCell(4).value, new Date('2026-07-21T09:00:00Z').toISOString());
+  assert.strictEqual(req.getRow(2).getCell(4).value, '21/07/2026'); // dd/mm/yyyy Europe/London
   const sup = wb.getWorksheet('Replacements Supplied');
   assert.strictEqual(sup.getRow(2).getCell(2).value, 'KB-2026-000011');
 });

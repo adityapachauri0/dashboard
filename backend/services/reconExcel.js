@@ -1,12 +1,13 @@
 const ExcelJS = require('exceljs');
-const { PAY_LABELS, LINE_VIRGIN, LINE_SEARCHED, bluelionRates } = require('./invoiceService');
+const { PAY_LABELS, LINE_VIRGIN, LINE_SEARCHED, bluelionRates, ddmmyyyy } = require('./invoiceService');
 
 // same guard as exportRoutes: neutralise spreadsheet formula prefixes
 const safe = (v) => {
   const s = String(v ?? '');
   return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
 };
-const iso = (d) => (d ? new Date(d).toISOString() : '');
+// client-facing date cells: dd/mm/yyyy Europe/London, not a raw ISO timestamp
+const ukDate = (d) => (d ? ddmmyyyy(new Date(d)) : '');
 const category = (l) => (l.search_status === 'virgin' ? LINE_VIRGIN : LINE_SEARCHED);
 // 'unknown' search_status is neither billable nor summarisable — drop it here so every
 // tab built from a lead list reconciles regardless of what the caller passed in.
@@ -31,7 +32,7 @@ async function buildBlueLionWorkbook(allLeads) {
   for (const l of leads) {
     const name = l.affiliate_id?.name || 'unknown';
     const id = String(l.affiliate_id?._id ?? l.affiliate_id ?? 'unknown');
-    ws.addRow([safe(l.ref), iso(l.submitted_at), safe(name), l.search_status,
+    ws.addRow([safe(l.ref), ukDate(l.submitted_at), safe(name), l.search_status,
       PAY_LABELS[l.payable_status] || l.payable_status, category(l),
       l.search_status === 'virgin' ? rates.virgin : rates.searched]);
     const a = byAff.get(id) || { name, virgin: 0, searched: 0 };
@@ -60,7 +61,7 @@ async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, s
     ['Payment Status', 28], ['Invoice Category', 34], ['Value', 10],
   ]);
   for (const l of dayLeads.filter(knownStatus)) {
-    pay.addRow([safe(l.ref), iso(l.submitted_at), l.search_status,
+    pay.addRow([safe(l.ref), ukDate(l.submitted_at), l.search_status,
       PAY_LABELS[l.payable_status] || l.payable_status, category(l),
       l.search_status === 'virgin' ? rc.virgin_rate || 0 : rc.searched_upfront_rate || 0]);
   }
@@ -69,22 +70,22 @@ async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, s
     ['Lead Reference', 20], ['Reason', 14], ['Requested At', 22], ['Replace By (72h)', 22],
   ]);
   for (const l of openReplacements) {
-    req.addRow([safe(l.ref), l.replacement_reason || 'signature', iso(l.replacement_requested_at),
-      l.replacement_requested_at ? new Date(new Date(l.replacement_requested_at).getTime() + H72).toISOString() : '']);
+    req.addRow([safe(l.ref), l.replacement_reason || 'signature', ukDate(l.replacement_requested_at),
+      l.replacement_requested_at ? ukDate(new Date(l.replacement_requested_at).getTime() + H72) : '']);
   }
 
   const sup = sheet(wb, 'Replacements Supplied', [
     ['Original Lead', 20], ['Replacement Lead', 20], ['Reason', 14], ['Requested At', 22],
   ]);
   for (const l of suppliedReplacements) {
-    sup.addRow([safe(l.ref), safe(l.replaced_by_lead?.ref || ''), l.replacement_reason || 'signature', iso(l.replacement_requested_at)]);
+    sup.addRow([safe(l.ref), safe(l.replaced_by_lead?.ref || ''), l.replacement_reason || 'signature', ukDate(l.replacement_requested_at)]);
   }
 
   const conf = sheet(wb, 'Confirmed After Lender Check', [
     ['Lead Reference', 20], ['Submission Date', 22], ['Payment Status', 28],
   ]);
   for (const l of confirmedLeads) {
-    conf.addRow([safe(l.ref), iso(l.submitted_at), PAY_LABELS[l.payable_status] || l.payable_status]);
+    conf.addRow([safe(l.ref), ukDate(l.submitted_at), PAY_LABELS[l.payable_status] || l.payable_status]);
   }
 
   return Buffer.from(await wb.xlsx.writeBuffer());

@@ -62,8 +62,7 @@ function buildLines(counts, rates) {
   return { lines, net, vat, gross: round2(net + vat) };
 }
 
-async function previewDailyInvoice(now = new Date()) {
-  const day = londonDay(new Date(now.getTime() - 24 * 3600 * 1000));
+async function previewInvoiceForDay(day) {
   const leads = await Lead.find(billableFilter(periodBounds(day)))
     .sort({ submitted_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
   const counts = {
@@ -73,22 +72,25 @@ async function previewDailyInvoice(now = new Date()) {
   return { day, counts, calc: buildLines(counts, bluelionRates()), leads };
 }
 
+async function previewDailyInvoice(now = new Date()) {
+  return previewInvoiceForDay(londonDay(new Date(now.getTime() - 24 * 3600 * 1000)));
+}
+
 async function nextInvoiceNumber() {
   const c = await Counter.findByIdAndUpdate('invoice_bluelion', { $inc: { seq: 1 } }, { new: true, upsert: true });
   return { seq: c.seq, number: `BlueLion ${String(c.seq).padStart(3, '0')}` };
 }
 
-async function generateDailyInvoice(now = new Date()) {
-  const day = londonDay(new Date(now.getTime() - 24 * 3600 * 1000));
+async function generateInvoiceForDay(day, invoiceDate = new Date()) {
   const existing = await Invoice.findOne({ type: 'daily', period_end: day });
   if (existing) return { invoice: existing, created: false, leads: null };
-  const { counts, calc, leads } = await previewDailyInvoice(now);
+  const { calc, leads } = await previewInvoiceForDay(day);
   if (!leads.length) return { invoice: null, created: false, leads: [] };
   const { seq, number } = await nextInvoiceNumber();
   let invoice;
   try {
     invoice = await Invoice.create({
-      number, seq, type: 'daily', period_start: day, period_end: day, invoice_date: now,
+      number, seq, type: 'daily', period_start: day, period_end: day, invoice_date: invoiceDate,
       lines: calc.lines, net: calc.net, vat: calc.vat, gross: calc.gross,
       email_to: process.env.INVOICE_TO_EMAIL || '',
     });
@@ -104,12 +106,17 @@ async function generateDailyInvoice(now = new Date()) {
   return { invoice, created: true, leads };
 }
 
+async function generateDailyInvoice(now = new Date()) {
+  return generateInvoiceForDay(londonDay(new Date(now.getTime() - 24 * 3600 * 1000)), now);
+}
+
 const STORAGE_DIR = path.join(__dirname, '..', 'storage', 'invoices');
 const ensureStorage = () => fs.mkdirSync(STORAGE_DIR, { recursive: true });
 
 module.exports = {
   LINE_VIRGIN, LINE_SEARCHED, PAY_LABELS, VAT_RATE,
   round2, money, gbp, londonDay, ddmmyyyy, periodBounds, billableFilter,
-  bluelionRates, buildLines, previewDailyInvoice, generateDailyInvoice,
+  bluelionRates, buildLines, previewDailyInvoice, previewInvoiceForDay,
+  generateDailyInvoice, generateInvoiceForDay,
   nextInvoiceNumber, STORAGE_DIR, ensureStorage,
 };

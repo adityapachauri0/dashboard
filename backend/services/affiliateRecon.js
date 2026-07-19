@@ -54,57 +54,70 @@ Kickbyte Media Ltd (Trading as Click2Leads)
   return { subject, text, html };
 }
 
+// Lookback window: a send failure on day D isn't retried once the day rolls
+// over (the per-affiliate-per-day ReconSend row is only written on success),
+// so a transient SMTP/DB outage would otherwise lose that day's recon for
+// good. Walking the last 3 London days lets an unsent day self-heal on a
+// later run without double-sending days that already have a ReconSend row.
+const LOOKBACK_DAYS = 3;
+
 async function buildAffiliateRecons(now = new Date()) {
-  const day = londonDay(new Date(now.getTime() - 24 * 3600 * 1000));
-  const bounds = periodBounds(day);
   const affiliates = await Affiliate.find({ active: true }).lean();
   const out = [];
 
-  for (const a of affiliates) {
-    if (await ReconSend.findOne({ affiliate_id: a._id, day })) continue;
+  for (let n = LOOKBACK_DAYS; n >= 1; n -= 1) {
+    const day = londonDay(new Date(now.getTime() - n * 24 * 3600 * 1000));
+    const bounds = periodBounds(day);
 
-    const dayLeads = await Lead.find({ ...billableFilter(bounds), affiliate_id: a._id })
-      .sort({ submitted_at: 1 }).lean();
-    const newObligations = await Lead.countDocuments({
-      affiliate_id: a._id, replacement_status: 'required',
-      replacement_requested_at: { $gte: bounds.start, $lt: bounds.end },
-    });
-    if (!dayLeads.length && !newObligations) continue;
-    if (!a.contact_email) {
-      console.warn(`recon: affiliate ${a.name} has activity but no contact_email — skipped`);
-      continue;
+    for (const a of affiliates) {
+      if (await ReconSend.findOne({ affiliate_id: a._id, day })) continue;
+
+      const dayLeads = await Lead.find({ ...billableFilter(bounds), affiliate_id: a._id })
+        .sort({ submitted_at: 1 }).lean();
+      const newObligations = await Lead.countDocuments({
+        affiliate_id: a._id, replacement_status: 'required',
+        replacement_requested_at: { $gte: bounds.start, $lt: bounds.end },
+      });
+      if (!dayLeads.length && !newObligations) continue;
+      if (!a.contact_email) {
+        console.warn(`recon: affiliate ${a.name} has activity but no contact_email — skipped`);
+        continue;
+      }
+
+      // Current-state tabs — not bounded to `day`, so a replacement opened or
+      // resolved on any earlier day still shows up regardless of which day's
+      // recon this is.
+      const openReplacements = await Lead.find({ affiliate_id: a._id, replacement_status: 'required' })
+        .sort({ replacement_requested_at: 1 }).lean();
+      // Bounded on last_updated (resolution time), not replacement_requested_at
+      // (open time): Lead has no dedicated supplied-at field, and last_updated
+      // (Mongoose updatedAt) is stamped when replacement_status transitions to
+      // supplied/closed, so it approximates when the replacement was resolved.
+      const suppliedReplacements = await Lead.find({
+        affiliate_id: a._id, replacement_status: { $in: ['supplied', 'closed'] },
+        last_updated: { $gte: new Date(now.getTime() - 30 * 24 * 3600 * 1000) },
+      }).populate('replaced_by_lead', 'ref').lean();
+      const confirmedLeads = await Lead.find({
+        affiliate_id: a._id, payable_status: 'payable_full',
+        last_updated: { $gte: bounds.start, $lt: bounds.end },
+      }).lean();
+
+      const rc = a.rate_card || {};
+      const counts = {
+        full: dayLeads.filter((l) => l.search_status === 'virgin').length,
+        part: dayLeads.filter((l) => l.search_status === 'searched').length,
+      };
+      const amounts = {
+        fullRate: rc.virgin_rate || 0, partRate: rc.searched_upfront_rate || 0,
+        full: round2(counts.full * (rc.virgin_rate || 0)),
+        part: round2(counts.part * (rc.searched_upfront_rate || 0)),
+      };
+      const { subject, text, html } = reconEmail({ affiliate: a, day, counts, amounts });
+      const xlsx = await buildAffiliateWorkbook({
+        affiliate: a, dayLeads, openReplacements, suppliedReplacements, confirmedLeads,
+      });
+      out.push({ affiliate_id: a._id, name: a.name, to: a.contact_email, day, subject, text, html, xlsx });
     }
-
-    const openReplacements = await Lead.find({ affiliate_id: a._id, replacement_status: 'required' })
-      .sort({ replacement_requested_at: 1 }).lean();
-    // Bounded on last_updated (resolution time), not replacement_requested_at
-    // (open time): Lead has no dedicated supplied-at field, and last_updated
-    // (Mongoose updatedAt) is stamped when replacement_status transitions to
-    // supplied/closed, so it approximates when the replacement was resolved.
-    const suppliedReplacements = await Lead.find({
-      affiliate_id: a._id, replacement_status: { $in: ['supplied', 'closed'] },
-      last_updated: { $gte: new Date(now.getTime() - 30 * 24 * 3600 * 1000) },
-    }).populate('replaced_by_lead', 'ref').lean();
-    const confirmedLeads = await Lead.find({
-      affiliate_id: a._id, payable_status: 'payable_full',
-      last_updated: { $gte: bounds.start, $lt: bounds.end },
-    }).lean();
-
-    const rc = a.rate_card || {};
-    const counts = {
-      full: dayLeads.filter((l) => l.search_status === 'virgin').length,
-      part: dayLeads.filter((l) => l.search_status === 'searched').length,
-    };
-    const amounts = {
-      fullRate: rc.virgin_rate || 0, partRate: rc.searched_upfront_rate || 0,
-      full: round2(counts.full * (rc.virgin_rate || 0)),
-      part: round2(counts.part * (rc.searched_upfront_rate || 0)),
-    };
-    const { subject, text, html } = reconEmail({ affiliate: a, day, counts, amounts });
-    const xlsx = await buildAffiliateWorkbook({
-      affiliate: a, dayLeads, openReplacements, suppliedReplacements, confirmedLeads,
-    });
-    out.push({ affiliate_id: a._id, name: a.name, to: a.contact_email, day, subject, text, html, xlsx });
   }
   return out;
 }
