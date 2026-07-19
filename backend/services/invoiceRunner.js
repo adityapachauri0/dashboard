@@ -4,7 +4,7 @@ const Invoice = require('../models/Invoice');
 const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
 const {
-  generateInvoiceForDay, money, STORAGE_DIR, ensureStorage, periodBounds, billableFilter, londonDay,
+  generateInvoiceForDay, money, STORAGE_DIR, ensureStorage, periodBounds, billableFilter, londonDay, LOOKBACK_DAYS,
 } = require('./invoiceService');
 // property access (not destructured) so tests can stub renderInvoicePdf/buildBlueLionWorkbook to fail
 const invoicePdf = require('./invoicePdf');
@@ -107,7 +107,7 @@ async function ensureArtifacts(invoice, leads) {
 
 async function runDaily(now = new Date(), { send = sendAccountsMail } = {}) {
   ensureStorage();
-  const summary = { day: null, invoice: null, retried: 0, backfilled: 0, recons_sent: 0, recons_failed: 0 };
+  const summary = { day: null, invoice: null, retried: 0, backfilled: 0, failed_invoices: 0, recons_sent: 0, recons_failed: 0 };
 
   // 1. retry earlier failures first — heal any stranded invoice (row saved,
   // artifacts never written, e.g. a prior render crash) before (re)sending.
@@ -121,10 +121,15 @@ async function runDaily(now = new Date(), { send = sendAccountsMail } = {}) {
         inv.email_error = e.message;
         await inv.save();
         console.error(`invoice ${inv.number} artifact regeneration failed: ${e.message}`);
+        summary.failed_invoices += 1;
         continue;
       }
     }
-    if (await emailInvoice(inv, send)) summary.retried += 1;
+    if (await emailInvoice(inv, send)) {
+      summary.retried += 1;
+    } else {
+      summary.failed_invoices += 1;
+    }
   }
 
   // 2. yesterday's invoice, plus backfill of any earlier missed day within the
@@ -134,18 +139,19 @@ async function runDaily(now = new Date(), { send = sendAccountsMail } = {}) {
   // Artifact generation/render/persist must never escape runDaily: the Invoice
   // row is already saved by generateInvoiceForDay, so a crash here is
   // contained and left for step 1 to heal on the next run.
-  for (let n = 3; n >= 1; n -= 1) {
+  for (let n = LOOKBACK_DAYS; n >= 1; n -= 1) {
     const day = londonDay(new Date(now.getTime() - n * 24 * 3600 * 1000));
     const { invoice, created, leads } = await generateInvoiceForDay(day, now);
     if (invoice && created) {
       try {
         await ensureArtifacts(invoice, leads);
-        await emailInvoice(invoice, send);
+        if (!(await emailInvoice(invoice, send))) summary.failed_invoices += 1;
       } catch (e) {
         invoice.email_status = 'failed';
         invoice.email_error = e.message;
         console.error(`invoice ${invoice.number} generation failed: ${e.message}`);
         await invoice.save();
+        summary.failed_invoices += 1;
       }
       if (n > 1) summary.backfilled += 1;
     }

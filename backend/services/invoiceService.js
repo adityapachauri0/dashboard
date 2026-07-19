@@ -8,6 +8,12 @@ const LINE_VIRGIN = 'PCP Claim Accepted Not Searched';
 const LINE_SEARCHED = 'PCP Claim Payable Previous Search';
 const VAT_RATE = 0.2;
 
+// How many past London days self-heal on each run: a stranded invoice/recon
+// (SMTP down, crash) from day D is retried on every run for the next
+// LOOKBACK_DAYS days after D, then given up on. Shared by invoiceRunner's
+// backfill loop, affiliateRecon's resend loop, and sendInvoices --dry-run.
+const LOOKBACK_DAYS = 3;
+
 const PAY_LABELS = {
   not_payable: 'Not payable',
   payable: 'Payable',
@@ -114,7 +120,7 @@ const STORAGE_DIR = path.join(__dirname, '..', 'storage', 'invoices');
 const ensureStorage = () => fs.mkdirSync(STORAGE_DIR, { recursive: true });
 
 module.exports = {
-  LINE_VIRGIN, LINE_SEARCHED, PAY_LABELS, VAT_RATE,
+  LINE_VIRGIN, LINE_SEARCHED, PAY_LABELS, VAT_RATE, LOOKBACK_DAYS,
   round2, money, gbp, londonDay, ddmmyyyy, periodBounds, billableFilter,
   bluelionRates, buildLines, previewDailyInvoice, previewInvoiceForDay,
   generateDailyInvoice, generateInvoiceForDay,

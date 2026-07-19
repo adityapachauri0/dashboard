@@ -57,11 +57,13 @@ test('send failure marks invoice failed, next run retries without regenerating',
   await seedDay();
   const s1 = await runDaily(NOW, { send: async () => { throw new Error('smtp down'); } });
   assert.strictEqual(s1.invoice.email_status, 'failed');
+  assert.strictEqual(s1.failed_invoices, 1);
   assert.strictEqual(s1.recons_sent, 0);
   assert.strictEqual(await Invoice.countDocuments(), 1);
   const sent = [];
   const s2 = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
   assert.strictEqual(s2.retried, 1);
+  assert.strictEqual(s2.failed_invoices, 0);
   assert.strictEqual(await Invoice.countDocuments(), 1); // no duplicate
   assert.strictEqual((await Invoice.findOne()).email_status, 'sent');
   assert.strictEqual(s2.recons_sent, 1); // recon also recovered
@@ -90,6 +92,7 @@ test('containment: artifact render failure marks invoice failed, does not crash 
     const sent = [];
     const summary = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
     assert.strictEqual(summary.invoice.email_status, 'failed');
+    assert.strictEqual(summary.failed_invoices, 1);
     assert.strictEqual(summary.recons_sent, 1);
     const inv = await Invoice.findOne({ number: 'BlueLion 001' });
     assert.strictEqual(inv.email_error, 'pdf render boom');

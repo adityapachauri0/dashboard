@@ -1,7 +1,7 @@
 const Affiliate = require('../models/Affiliate');
 const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
-const { billableFilter, periodBounds, londonDay, round2, money, VAT_RATE } = require('./invoiceService');
+const { billableFilter, periodBounds, londonDay, round2, money, VAT_RATE, LOOKBACK_DAYS } = require('./invoiceService');
 const { buildAffiliateWorkbook } = require('./reconExcel');
 
 const ddmmyyyyFromDay = (day) => day.split('-').reverse().join('/');
@@ -53,13 +53,6 @@ Kickbyte Media Ltd (Trading as Click2Leads)
     .join('\n');
   return { subject, text, html };
 }
-
-// Lookback window: a send failure on day D isn't retried once the day rolls
-// over (the per-affiliate-per-day ReconSend row is only written on success),
-// so a transient SMTP/DB outage would otherwise lose that day's recon for
-// good. Walking the last 3 London days lets an unsent day self-heal on a
-// later run without double-sending days that already have a ReconSend row.
-const LOOKBACK_DAYS = 3;
 
 async function buildAffiliateRecons(now = new Date()) {
   const affiliates = await Affiliate.find({ active: true }).lean();
