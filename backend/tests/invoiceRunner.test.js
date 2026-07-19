@@ -9,7 +9,8 @@ const Lead = require('../models/Lead');
 const Invoice = require('../models/Invoice');
 const ReconSend = require('../models/ReconSend');
 const { runDaily } = require('../services/invoiceRunner');
-const { STORAGE_DIR } = require('../services/invoiceService');
+const { STORAGE_DIR, periodBounds } = require('../services/invoiceService');
+const invoicePdf = require('../services/invoicePdf');
 
 before(setupDB);
 after(teardownDB);
@@ -79,4 +80,58 @@ test('second same-day run is a no-op', async () => {
   const sent = [];
   await runDaily(NOW, { send: async (m) => { sent.push(m); } });
   assert.strictEqual(sent.length, 0);
+});
+
+test('containment: artifact render failure marks invoice failed, does not crash runDaily, recons still attempted', async () => {
+  await seedDay();
+  const original = invoicePdf.renderInvoicePdf;
+  invoicePdf.renderInvoicePdf = async () => { throw new Error('pdf render boom'); };
+  try {
+    const sent = [];
+    const summary = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
+    assert.strictEqual(summary.invoice.email_status, 'failed');
+    assert.strictEqual(summary.recons_sent, 1);
+    const inv = await Invoice.findOne({ number: 'BlueLion 001' });
+    assert.strictEqual(inv.email_error, 'pdf render boom');
+    assert.ok(!inv.pdf_file);
+  } finally {
+    invoicePdf.renderInvoicePdf = original;
+  }
+});
+
+test('recovery: stranded invoice (row saved, artifacts never written) is healed and emailed on retry', async () => {
+  const aff = await Affiliate.create({
+    name: 'Claim3000', lead_source: 'claim3000', contact_email: 'ali@claim3000.co.uk',
+    rate_card: { virgin_rate: 40, searched_upfront_rate: 15 },
+  });
+  const oldPeriod = '2026-07-17';
+  const bounds = periodBounds(oldPeriod);
+  await Lead.create({
+    ref: 'KB-2026-000199', affiliate_id: aff._id,
+    submitted_at: new Date(bounds.start.getTime() + 3600 * 1000),
+    initial_status: 'accepted', search_status: 'virgin', signature_status: 'passed',
+  });
+  await Invoice.create({
+    number: 'BlueLion 001', seq: 1, type: 'daily',
+    period_start: oldPeriod, period_end: oldPeriod, invoice_date: new Date('2026-07-17T09:00:00Z'),
+    lines: [
+      { description: 'PCP Claim Accepted Not Searched', qty: 1, rate: 110, amount: 110 },
+      { description: 'PCP Claim Payable Previous Search', qty: 0, rate: 30, amount: 0 },
+    ],
+    net: 110, vat: 22, gross: 132,
+    email_to: 'accounts@bluelion.test', email_status: 'pending',
+  });
+
+  const sent = [];
+  const summary = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
+  assert.strictEqual(summary.retried, 1);
+  const inv = await Invoice.findOne({ number: 'BlueLion 001' });
+  assert.strictEqual(inv.email_status, 'sent');
+  assert.ok(inv.pdf_file);
+  assert.ok(inv.xlsx_file);
+  assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.pdf_file)));
+  assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.xlsx_file)));
+  const invMail = sent.find((m) => m.subject.includes('BlueLion 001'));
+  assert.ok(invMail, 'stranded invoice should have been emailed');
+  assert.deepStrictEqual(invMail.attachments.map((a) => a.filename), ['Invoice BlueLion 001.pdf', 'Reconciliation BlueLion 001.xlsx']);
 });

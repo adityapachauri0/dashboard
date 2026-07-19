@@ -1,10 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 const Invoice = require('../models/Invoice');
+const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
-const { generateDailyInvoice, previewDailyInvoice, money, STORAGE_DIR, ensureStorage } = require('./invoiceService');
-const { renderInvoicePdf } = require('./invoicePdf');
-const { buildBlueLionWorkbook } = require('./reconExcel');
+const {
+  generateDailyInvoice, previewDailyInvoice, money, STORAGE_DIR, ensureStorage, periodBounds, billableFilter,
+} = require('./invoiceService');
+// property access (not destructured) so tests can stub renderInvoicePdf/buildBlueLionWorkbook to fail
+const invoicePdf = require('./invoicePdf');
+const reconExcel = require('./reconExcel');
 const { buildAffiliateRecons } = require('./affiliateRecon');
 const { sendAccountsMail } = require('./mailer');
 
@@ -77,27 +81,67 @@ async function emailInvoice(invoice, send) {
   return invoice.email_status === 'sent';
 }
 
+// Renders the PDF/XLSX, writes them to STORAGE_DIR, stamps the filenames on
+// the invoice and saves — shared by the daily-generation path and the retry
+// path so a stranded invoice (row persisted, artifacts never written) is
+// healed with the exact same code that generates them the first time.
+// Filenames are only stamped after both files are written successfully, so a
+// render failure leaves pdf_file/xlsx_file unset — the invoice stays
+// self-healing on the next run instead of looking "done" with missing files.
+async function ensureArtifacts(invoice, leads) {
+  if (!leads) {
+    leads = await Lead.find(billableFilter(periodBounds(invoice.period_end)))
+      .sort({ submitted_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
+  }
+  const seq3 = String(invoice.seq).padStart(3, '0');
+  const pdfFile = `BlueLion-${seq3}.pdf`;
+  const xlsxFile = `BlueLion-${seq3}.xlsx`;
+  const pdfBuf = await invoicePdf.renderInvoicePdf(invoice);
+  const xlsxBuf = await reconExcel.buildBlueLionWorkbook(leads);
+  fs.writeFileSync(path.join(STORAGE_DIR, pdfFile), pdfBuf);
+  fs.writeFileSync(path.join(STORAGE_DIR, xlsxFile), xlsxBuf);
+  invoice.pdf_file = pdfFile;
+  invoice.xlsx_file = xlsxFile;
+  await invoice.save();
+}
+
 async function runDaily(now = new Date(), { send = sendAccountsMail } = {}) {
   ensureStorage();
   const summary = { day: null, invoice: null, retried: 0, recons_sent: 0, recons_failed: 0 };
 
-  // 1. retry earlier failures first (artifacts already on disk)
+  // 1. retry earlier failures first — heal any stranded invoice (row saved,
+  // artifacts never written, e.g. a prior render crash) before (re)sending.
   const unsent = await Invoice.find({ email_status: { $ne: 'sent' } }).sort({ seq: 1 });
   for (const inv of unsent) {
-    if (inv.pdf_file && (await emailInvoice(inv, send))) summary.retried += 1;
+    if (!inv.pdf_file) {
+      try {
+        await ensureArtifacts(inv);
+      } catch (e) {
+        inv.email_status = 'failed';
+        inv.email_error = e.message;
+        await inv.save();
+        console.error(`invoice ${inv.number} artifact regeneration failed: ${e.message}`);
+        continue;
+      }
+    }
+    if (await emailInvoice(inv, send)) summary.retried += 1;
   }
 
-  // 2. today's invoice
+  // 2. today's invoice — artifact generation/render/persist must never escape
+  // runDaily: the Invoice row is already saved by generateDailyInvoice, so a
+  // crash here is contained and left for step 1 to heal on the next run.
   const { invoice, created, leads } = await generateDailyInvoice(now);
   summary.day = invoice?.period_end || (await previewDailyInvoice(now)).day;
   if (invoice && created) {
-    const seq3 = String(invoice.seq).padStart(3, '0');
-    invoice.pdf_file = `BlueLion-${seq3}.pdf`;
-    invoice.xlsx_file = `BlueLion-${seq3}.xlsx`;
-    fs.writeFileSync(path.join(STORAGE_DIR, invoice.pdf_file), await renderInvoicePdf(invoice));
-    fs.writeFileSync(path.join(STORAGE_DIR, invoice.xlsx_file), await buildBlueLionWorkbook(leads));
-    await invoice.save();
-    await emailInvoice(invoice, send);
+    try {
+      await ensureArtifacts(invoice, leads);
+      await emailInvoice(invoice, send);
+    } catch (e) {
+      invoice.email_status = 'failed';
+      invoice.email_error = e.message;
+      console.error(`invoice ${invoice.number} generation failed: ${e.message}`);
+      await invoice.save();
+    }
   }
   if (invoice) {
     summary.invoice = { number: invoice.number, net: invoice.net, vat: invoice.vat, gross: invoice.gross, email_status: invoice.email_status };
