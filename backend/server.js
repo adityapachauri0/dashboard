@@ -18,6 +18,7 @@ function createApp() {
   app.use('/api/v1', require('./routes/statsRoutes'));
   app.use('/api/v1', require('./routes/replacementRoutes'));
   app.use('/api/v1', require('./routes/exportRoutes'));
+  app.use('/api/v1', require('./routes/invoiceRoutes'));
 
   // error handler — keep last; all routers mount above
   app.use((err, req, res, next) => {
