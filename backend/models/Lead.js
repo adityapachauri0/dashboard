@@ -33,6 +33,14 @@ const leadSchema = new mongoose.Schema(
       enum: ['not_payable', 'payable', 'partial_pending_confirmation', 'payable_full', 'replaced'],
       default: 'not_payable',
     },
+    // Confirmation billing (spec 2026-07-29): when a searched lead first
+    // reaches payable_full (lender confirmation), stamp the moment — set once
+    // in statusService, never reset. Leads without the stamp (all transitions
+    // before this feature deployed) are never confirmation-billed.
+    payable_full_at: Date,
+    // Set when the lead is claimed onto a confirmation invoice — the
+    // never-bill-twice anchor.
+    confirmation_invoice: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', index: true },
     needs_replacement: { type: Boolean, default: false },
     // Replacement obligation lifecycle (spec 2026-07-14). SLA deadline is always
     // derived as replacement_requested_at + 72h — never stored.

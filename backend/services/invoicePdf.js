@@ -18,30 +18,50 @@ const { money, gbp, ddmmyyyy } = require('./invoiceService');
 // instead of vector text. That keeps the page looking clean without
 // reintroducing any extractable old text.
 //
-// assets/invoice-template-bluelion.pdf remains the source of truth. Regenerate
-// the PNG whenever the template changes:
+// assets/invoice-template-bluelion*.pdf remain the source of truth. Regenerate
+// the PNGs whenever a template changes:
 //   pdftoppm -r 300 -png -singlefile assets/invoice-template-bluelion.pdf assets/invoice-template-bluelion
-const TEMPLATE_PNG = path.join(__dirname, '..', 'assets', 'invoice-template-bluelion.png');
+//   pdftoppm -r 300 -png -singlefile assets/invoice-template-bluelion-confirmation.pdf assets/invoice-template-bluelion-confirmation
 const PAGE_WIDTH = 594.95996;
 const PAGE_HEIGHT = 841.91998;
 
 // Stamp coordinates in PDF points (origin bottom-left), calibrated against the
-// client-approved template via scripts/renderSampleInvoice.js. If the template
+// client-approved template via scripts/renderSampleInvoice.js. If a template
 // is ever regenerated, re-run that script and adjust here.
+//
+// The confirmation template (client "Invoice BlueLion 0002") drops the second
+// line row, so its totals/balance/VAT-summary blocks sit 22.5pt higher —
+// measured via pdftotext -bbox against both template PDFs, applied as a delta
+// to the visually-calibrated daily values so both stay anchored to the same
+// approved calibration.
 const C = {
   size: 9,
   header: { value_x: 470, wipe_w: 110, invoice_y: 626, date_y: 613, due_y: 588 },
   cols: { qty_r: 428, rate_r: 484, amount_r: 573 }, // right edges
-  rows: { line1_y: 532.5, line2_y: 502.5 },
-  totals: { label_wipe_x: 500, subtotal_y: 456, vat_y: 437, total_y: 418 },
-  balance: { y: 386, size: 12 },
-  vatSummary: { y: 337.5, vat_r: 405, net_r: 573 },
+};
+
+const TYPE_LAYOUT = {
+  daily: {
+    template: 'invoice-template-bluelion.png',
+    rows: [532.5, 502.5],
+    totals: { label_wipe_x: 500, subtotal_y: 456, vat_y: 437, total_y: 418 },
+    balance: { y: 386, size: 12 },
+    vatSummary: { y: 337.5, vat_r: 405, net_r: 573 },
+  },
+  confirmation: {
+    template: 'invoice-template-bluelion-confirmation.png',
+    rows: [532.5],
+    totals: { label_wipe_x: 500, subtotal_y: 478.5, vat_y: 459.5, total_y: 440.5 },
+    balance: { y: 408.5, size: 12 },
+    vatSummary: { y: 360, vat_r: 405, net_r: 573 },
+  },
 };
 
 async function renderInvoicePdf(invoice) {
+  const L = TYPE_LAYOUT[invoice.type] || TYPE_LAYOUT.daily;
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  const bg = await pdf.embedPng(fs.readFileSync(TEMPLATE_PNG));
+  const bg = await pdf.embedPng(fs.readFileSync(path.join(__dirname, '..', 'assets', L.template)));
   page.drawImage(bg, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
 
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -68,27 +88,26 @@ async function renderInvoicePdf(invoice) {
   text(dateStr, C.header.value_x, C.header.due_y);
 
   // line rows: qty / rate / amount (descriptions are static template text)
-  const rows = [C.rows.line1_y, C.rows.line2_y];
   invoice.lines.forEach((l, i) => {
-    wipe(C.cols.qty_r - 60, rows[i], C.cols.amount_r - C.cols.qty_r + 62);
-    rtext(String(l.qty), C.cols.qty_r, rows[i]);
-    rtext(money(l.rate), C.cols.rate_r, rows[i]);
-    rtext(money(l.amount), C.cols.amount_r, rows[i]);
+    wipe(C.cols.qty_r - 60, L.rows[i], C.cols.amount_r - C.cols.qty_r + 62);
+    rtext(String(l.qty), C.cols.qty_r, L.rows[i]);
+    rtext(money(l.rate), C.cols.rate_r, L.rows[i]);
+    rtext(money(l.amount), C.cols.amount_r, L.rows[i]);
   });
 
   // totals
-  for (const [y, v] of [[C.totals.subtotal_y, invoice.net], [C.totals.vat_y, invoice.vat], [C.totals.total_y, invoice.gross]]) {
-    wipe(C.totals.label_wipe_x, y, C.cols.amount_r - C.totals.label_wipe_x + 2);
+  for (const [y, v] of [[L.totals.subtotal_y, invoice.net], [L.totals.vat_y, invoice.vat], [L.totals.total_y, invoice.gross]]) {
+    wipe(L.totals.label_wipe_x, y, C.cols.amount_r - L.totals.label_wipe_x + 2);
     rtext(money(v), C.cols.amount_r, y);
   }
-  wipe(C.totals.label_wipe_x, C.balance.y, C.cols.amount_r - C.totals.label_wipe_x + 2, 16);
-  rtext(gbp(invoice.gross), C.cols.amount_r, C.balance.y, { f: bold, size: C.balance.size });
+  wipe(L.totals.label_wipe_x, L.balance.y, C.cols.amount_r - L.totals.label_wipe_x + 2, 16);
+  rtext(gbp(invoice.gross), C.cols.amount_r, L.balance.y, { f: bold, size: L.balance.size });
 
   // VAT summary row: VAT and NET amounts
-  wipe(C.vatSummary.vat_r - 70, C.vatSummary.y, 72);
-  rtext(money(invoice.vat), C.vatSummary.vat_r, C.vatSummary.y);
-  wipe(C.vatSummary.net_r - 70, C.vatSummary.y, 72);
-  rtext(money(invoice.net), C.vatSummary.net_r, C.vatSummary.y);
+  wipe(L.vatSummary.vat_r - 70, L.vatSummary.y, 72);
+  rtext(money(invoice.vat), L.vatSummary.vat_r, L.vatSummary.y);
+  wipe(L.vatSummary.net_r - 70, L.vatSummary.y, 72);
+  rtext(money(invoice.net), L.vatSummary.net_r, L.vatSummary.y);
 
   return Buffer.from(await pdf.save());
 }

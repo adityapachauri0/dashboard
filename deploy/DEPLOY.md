@@ -34,6 +34,14 @@ Daily 09:00 Europe/London cron emails BlueLion a VAT invoice + Excel reconciliat
 yesterday's leads, backfilling up to 3 prior London days if a run was missed, and emails
 each active affiliate their own reconciliation.
 
+The same run also sends a separate "Lender Confirmation" invoice (client template
+"Invoice BlueLion 0002", Jul 2026) whenever Previously Searched claims flipped to
+payable-in-full the previous day — £80/claim + VAT, same sequential numbering.
+Only claims whose confirmation happened AFTER this feature is deployed are billed
+(the `payable_full_at` stamp starts existing at deploy); claims already sitting at
+payable-in-full before deploy never retro-bill. Missed runs sweep automatically —
+no lookback window, an unbilled stamped claim bills on the next successful run.
+
 ### Server update
 
 ```
@@ -54,7 +62,7 @@ ACCOUNTS_SMTP_USER=accounts@click2leads.co.uk
 ACCOUNTS_SMTP_PASS=<pending from client — GoDaddy mailbox password>
 INVOICE_CC=<internal copy address, e.g. anthony@click2leads.co.uk>
 INVOICE_TO_EMAIL=<pending from client — BlueLion accounts address>
-# BLUELION_VIRGIN_RATE=110   BLUELION_SEARCHED_RATE=30  (defaults; only set to override)
+# BLUELION_VIRGIN_RATE=110   BLUELION_SEARCHED_RATE=30   BLUELION_CONFIRMATION_RATE=80  (defaults; only set to override)
 # INVOICE_HEARTBEAT_URL=<optional Uptime Kuma push URL>
 ```
 

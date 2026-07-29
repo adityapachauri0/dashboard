@@ -174,3 +174,27 @@ test('recovery: stranded invoice (row saved, artifacts never written) is healed 
   assert.ok(invMail, 'stranded invoice should have been emailed');
   assert.deepStrictEqual(invMail.attachments.map((a) => a.filename), ['Invoice BlueLion 001.pdf', 'Reconciliation BlueLion 001.xlsx']);
 });
+
+test('confirmation invoice generated in the same run, own copy and workbook, idempotent', async () => {
+  const aff = await seedDay();
+  await Lead.create({
+    ref: 'KB-2026-000202', affiliate_id: aff._id, submitted_at: new Date('2026-07-10T10:00:00Z'),
+    initial_status: 'accepted', search_status: 'searched', signature_status: 'passed',
+    payable_status: 'payable_full', payable_full_at: new Date('2026-07-18T15:00:00Z'),
+  });
+  const sent = [];
+  const summary = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
+  assert.strictEqual(summary.invoice.number, 'BlueLion 001');
+  assert.strictEqual(summary.confirmation_invoice.number, 'BlueLion 002');
+  assert.strictEqual(summary.confirmation_invoice.email_status, 'sent');
+  const mail = sent.find((m) => /Lender Confirmations/.test(m.subject));
+  assert.match(mail.text, /Claims Payable in Full: 1/);
+  assert.match(mail.text, /Net Total: £80\.00/);
+  assert.match(mail.text, /VAT \(20%\): £16\.00/);
+  assert.deepStrictEqual(mail.attachments.map((a) => a.filename), ['Invoice BlueLion 002.pdf', 'Reconciliation BlueLion 002.xlsx']);
+  const inv = await Invoice.findOne({ type: 'confirmation' });
+  assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.pdf_file)));
+  assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.xlsx_file)));
+  await runDaily(NOW, { send: async (m) => { sent.push(m); } });
+  assert.strictEqual(await Invoice.countDocuments({ type: 'confirmation' }), 1);
+});

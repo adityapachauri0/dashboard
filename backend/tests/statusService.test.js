@@ -159,3 +159,23 @@ test('reason survives supplied transition', () => {
   assert.strictEqual(lead.replacement_status, 'supplied');
   assert.strictEqual(lead.replacement_reason, 'cooling_off');
 });
+
+test('lender confirmation stamps payable_full_at once, never reset', () => {
+  const lead = freshLead();
+  applyStatusChanges(lead, { initial_status: 'accepted', search_status: 'searched' }, rates, { source: 'import' });
+  assert.strictEqual(lead.payable_status, 'partial_pending_confirmation');
+  assert.strictEqual(lead.payable_full_at, undefined);
+  applyStatusChanges(lead, { law_firm_confirmed: true }, rates, { source: 'import' });
+  assert.strictEqual(lead.payable_status, 'payable_full');
+  assert.ok(lead.payable_full_at instanceof Date);
+  assert.ok(lead.history.some((h) => h.field === 'payable_full_at'));
+  const stamp = lead.payable_full_at;
+  // later cancellation flips status but must not clear or move the stamp
+  applyStatusChanges(lead, { cancelled: true }, rates, { source: 'import' });
+  assert.strictEqual(lead.payable_status, 'not_payable');
+  assert.strictEqual(lead.payable_full_at, stamp);
+  // reinstating confirmation later must not restart the billing clock
+  applyStatusChanges(lead, { cancelled: false }, rates, { source: 'manual' });
+  assert.strictEqual(lead.payable_status, 'payable_full');
+  assert.strictEqual(lead.payable_full_at, stamp);
+});

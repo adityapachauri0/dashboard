@@ -1,5 +1,5 @@
 const ExcelJS = require('exceljs');
-const { PAY_LABELS, LINE_VIRGIN, LINE_SEARCHED, bluelionRates, ddmmyyyy } = require('./invoiceService');
+const { PAY_LABELS, LINE_VIRGIN, LINE_SEARCHED, LINE_CONFIRMATION, bluelionRates, confirmationRate, ddmmyyyy } = require('./invoiceService');
 
 // same guard as exportRoutes: neutralise spreadsheet formula prefixes
 const safe = (v) => {
@@ -50,6 +50,33 @@ async function buildBlueLionWorkbook(allLeads) {
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
+// Recon for a confirmation invoice: every row is a lender-confirmed claim at
+// the flat confirmation rate — the daily workbook's per-search-status pricing
+// would show the wrong figures here.
+async function buildConfirmationWorkbook(leads) {
+  const rate = confirmationRate();
+  const wb = new ExcelJS.Workbook();
+  const ws = sheet(wb, 'Confirmed Claims', [
+    ['Lead Reference', 20], ['Submission Date', 22], ['Confirmed Date', 22], ['Affiliate', 18],
+    ['Invoice Category', 34], ['Invoice Value', 13],
+  ]);
+  const byAff = new Map();
+  for (const l of leads) {
+    const name = l.affiliate_id?.name || 'unknown';
+    ws.addRow([safe(l.ref), ukDate(l.submitted_at), ukDate(l.payable_full_at), safe(name), LINE_CONFIRMATION, rate]);
+    byAff.set(name, (byAff.get(name) || 0) + 1);
+  }
+  const sum = sheet(wb, 'Affiliate Summary', [['Affiliate', 24], ['Confirmed Claims', 16], ['Total £', 12]]);
+  let total = 0;
+  for (const [name, n] of [...byAff.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    sum.addRow([safe(name), n, n * rate]);
+    total += n;
+  }
+  const totalRow = sum.addRow(['TOTAL', total, total * rate]);
+  totalRow.font = { bold: true };
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
 const H72 = 72 * 3600 * 1000;
 
 async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, suppliedReplacements, confirmedLeads }) {
@@ -91,4 +118,4 @@ async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, s
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-module.exports = { buildBlueLionWorkbook, buildAffiliateWorkbook };
+module.exports = { buildBlueLionWorkbook, buildConfirmationWorkbook, buildAffiliateWorkbook };

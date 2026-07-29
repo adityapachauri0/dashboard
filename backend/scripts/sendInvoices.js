@@ -56,6 +56,13 @@ async function main() {
         console.log(`artifacts written to ${out}`);
       }
     }
+    const { previewConfirmationInvoice } = require('../services/invoiceService');
+    const c = await previewConfirmationInvoice(now);
+    if (c.leads.length) {
+      console.log(`DRY RUN — confirmation: would bill ${c.counts.confirmed} lender-confirmed claim(s) net=£${money(c.calc.net)} vat=£${money(c.calc.vat)} gross=£${money(c.calc.gross)}`);
+    } else {
+      console.log('DRY RUN — confirmation: no unbilled lender-confirmed claims — no invoice would be generated');
+    }
     for (const r of await buildAffiliateRecons(now)) {
       console.log(`--- recon → ${r.name} <${r.to}> ---\n${r.subject}\n${r.text}`);
     }
@@ -64,7 +71,7 @@ async function main() {
 
   const { runDaily } = require('../services/invoiceRunner');
   const s = await runDaily(now);
-  console.log(`${now.toISOString()} invoices day=${s.day} invoice=${s.invoice ? `${s.invoice.number} £${s.invoice.gross} ${s.invoice.email_status}` : 'none'} retried=${s.retried} backfilled=${s.backfilled} failed=${s.failed_invoices} recons=${s.recons_sent}/${s.recons_sent + s.recons_failed}`);
+  console.log(`${now.toISOString()} invoices day=${s.day} invoice=${s.invoice ? `${s.invoice.number} £${s.invoice.gross} ${s.invoice.email_status}` : 'none'} confirmation=${s.confirmation_invoice ? `${s.confirmation_invoice.number} £${s.confirmation_invoice.gross} ${s.confirmation_invoice.email_status}` : 'none'} retried=${s.retried} backfilled=${s.backfilled} failed=${s.failed_invoices} recons=${s.recons_sent}/${s.recons_sent + s.recons_failed}`);
   if (process.env.INVOICE_HEARTBEAT_URL && !s.failed_invoices && !s.recons_failed) {
     await fetch(process.env.INVOICE_HEARTBEAT_URL).catch(() => {});
   }

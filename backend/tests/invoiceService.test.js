@@ -118,3 +118,81 @@ test('generateDailyInvoice returns the existing invoice when create loses a dupl
     Invoice.findOne = realFindOne;
   }
 });
+
+// ---- Deferred lender-confirmation invoices ----
+
+const mongoose = require('mongoose');
+
+async function seedConfirmed({ stampedAt = new Date('2026-07-18T14:00:00Z'), ...overrides } = {}) {
+  const lead = await seed({ search_status: 'searched', ...overrides });
+  const set = { payable_status: 'payable_full' };
+  if (stampedAt) set.payable_full_at = stampedAt;
+  await Lead.updateOne({ _id: lead._id }, set);
+  return Lead.findById(lead._id);
+}
+
+test('confirmation preview: only stamped, pre-today, searched, unclaimed leads bill', async () => {
+  await seedConfirmed();                                                 // billable
+  await seedConfirmed({ stampedAt: null });                              // legacy: payable_full, never stamped
+  await seedConfirmed({ stampedAt: new Date('2026-07-19T07:30:00Z') });  // stamped today — waits for tomorrow
+  await seedConfirmed({ cancelled: true });                              // cancelled after confirmation
+  const virgin = await seed({});
+  await Lead.updateOne({ _id: virgin._id }, { payable_status: 'payable_full', payable_full_at: new Date('2026-07-18T14:00:00Z') });
+  const claimed = await seedConfirmed();
+  await Lead.updateOne({ _id: claimed._id }, { confirmation_invoice: new mongoose.Types.ObjectId() });
+  const p = await svc.previewConfirmationInvoice(NOW);
+  assert.strictEqual(p.counts.confirmed, 1);
+  assert.deepStrictEqual(p.calc.lines[0], { description: 'PCP Claim Payable Lender Confirmation', qty: 1, rate: 80, amount: 80 });
+  assert.strictEqual(p.calc.vat, 16);
+  assert.strictEqual(p.calc.gross, 96);
+});
+
+test('generateConfirmationInvoice claims leads, correct totals, idempotent per day', async () => {
+  await seedConfirmed();
+  await seedConfirmed();
+  const r = await svc.generateConfirmationInvoice(NOW);
+  assert.strictEqual(r.created, true);
+  assert.strictEqual(r.invoice.type, 'confirmation');
+  assert.strictEqual(r.invoice.number, 'BlueLion 001');
+  assert.strictEqual(r.invoice.net, 160);
+  assert.strictEqual(r.invoice.vat, 32);
+  assert.strictEqual(r.invoice.gross, 192);
+  assert.strictEqual(r.invoice.period_end, '2026-07-18');
+  assert.strictEqual(r.leads.length, 2);
+  assert.strictEqual(await Lead.countDocuments({ confirmation_invoice: r.invoice._id }), 2);
+  const again = await svc.generateConfirmationInvoice(NOW);
+  assert.strictEqual(again.created, false);
+  assert.strictEqual(await Invoice.countDocuments(), 1);
+});
+
+test('empty confirmation run creates nothing and burns no invoice number', async () => {
+  const r = await svc.generateConfirmationInvoice(NOW);
+  assert.strictEqual(r.invoice, null);
+  await seed({});
+  const daily = await svc.generateDailyInvoice(NOW);
+  assert.strictEqual(daily.invoice.number, 'BlueLion 001');
+});
+
+test('missed-run stamps are swept into the next confirmation invoice', async () => {
+  await seedConfirmed({ stampedAt: new Date('2026-07-15T10:00:00Z') }); // never billed — run was missed
+  await seedConfirmed();
+  const r = await svc.generateConfirmationInvoice(NOW);
+  assert.strictEqual(r.invoice.lines[0].qty, 2);
+  assert.strictEqual(r.invoice.period_start, '2026-07-15');
+  assert.strictEqual(r.invoice.period_end, '2026-07-18');
+});
+
+test('orphan claims (crash before create) are released and re-billed', async () => {
+  const lead = await seedConfirmed();
+  await Lead.updateOne({ _id: lead._id }, { confirmation_invoice: new mongoose.Types.ObjectId() });
+  const r = await svc.generateConfirmationInvoice(NOW);
+  assert.strictEqual(r.created, true);
+  assert.strictEqual(r.invoice.lines[0].qty, 1);
+});
+
+test('billed leads never re-bill on later days', async () => {
+  await seedConfirmed();
+  await svc.generateConfirmationInvoice(NOW);
+  const r2 = await svc.generateConfirmationInvoice(new Date('2026-07-20T08:00:00Z'));
+  assert.strictEqual(r2.invoice, null);
+});

@@ -4,7 +4,8 @@ const Invoice = require('../models/Invoice');
 const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
 const {
-  generateInvoiceForDay, money, STORAGE_DIR, ensureStorage, periodBounds, billableFilter, londonDay, LOOKBACK_DAYS,
+  generateInvoiceForDay, generateConfirmationInvoice, money, STORAGE_DIR, ensureStorage,
+  periodBounds, billableFilter, londonDay, LOOKBACK_DAYS,
 } = require('./invoiceService');
 // property access (not destructured) so tests can stub renderInvoicePdf/buildBlueLionWorkbook to fail
 const invoicePdf = require('./invoicePdf');
@@ -21,6 +22,7 @@ function recipients() {
 }
 
 function invoiceEmail(invoice) {
+  if (invoice.type === 'confirmation') return confirmationEmail(invoice);
   const period = ddmmyyyyFromDay(invoice.period_end);
   const [virgin, searched] = invoice.lines;
   const subject = `Invoice ${invoice.number} – Kickbyte Media Ltd – ${period}`;
@@ -46,6 +48,32 @@ Invoice Summary
 Net Total: £${money(invoice.net)}
 VAT (20%): £${money(invoice.vat)}
 Invoice Total: £${money(invoice.gross)}
+
+If you have any queries regarding the attached invoice or supporting reconciliation, please let us know.
+
+Kind regards,
+Kickbyte Media Ltd (Trading as Click2Leads)
+`;
+  const html = text.split('\n\n').map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n');
+  return { subject, text, html };
+}
+
+function confirmationEmail(invoice) {
+  const [line] = invoice.lines;
+  const subject = `Invoice ${invoice.number} – Kickbyte Media Ltd – Lender Confirmations`;
+  const text = `Good morning,
+
+Please find attached Invoice ${invoice.number} covering Previously Searched claims that have now become Payable in Full following lender confirmation.
+
+Invoice Summary
+
+- Claims Payable in Full: ${line.qty}
+
+Net Total: £${money(invoice.net)}
+VAT (20%): £${money(invoice.vat)}
+Invoice Total: £${money(invoice.gross)}
+
+This invoice is separate from the standard daily invoice. For ease of reconciliation, we have also attached an Excel workbook listing each confirmed claim.
 
 If you have any queries regarding the attached invoice or supporting reconciliation, please let us know.
 
@@ -89,15 +117,21 @@ async function emailInvoice(invoice, send) {
 // render failure leaves pdf_file/xlsx_file unset — the invoice stays
 // self-healing on the next run instead of looking "done" with missing files.
 async function ensureArtifacts(invoice, leads) {
+  const isConfirmation = invoice.type === 'confirmation';
   if (!leads) {
-    leads = await Lead.find(billableFilter(periodBounds(invoice.period_end)))
-      .sort({ submitted_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
+    leads = isConfirmation
+      ? await Lead.find({ confirmation_invoice: invoice._id })
+        .sort({ payable_full_at: 1 }).populate('affiliate_id', 'name rate_card').lean()
+      : await Lead.find(billableFilter(periodBounds(invoice.period_end)))
+        .sort({ submitted_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
   }
   const seq3 = String(invoice.seq).padStart(3, '0');
   const pdfFile = `BlueLion-${seq3}.pdf`;
   const xlsxFile = `BlueLion-${seq3}.xlsx`;
   const pdfBuf = await invoicePdf.renderInvoicePdf(invoice);
-  const xlsxBuf = await reconExcel.buildBlueLionWorkbook(leads);
+  const xlsxBuf = isConfirmation
+    ? await reconExcel.buildConfirmationWorkbook(leads)
+    : await reconExcel.buildBlueLionWorkbook(leads);
   fs.writeFileSync(path.join(STORAGE_DIR, pdfFile), pdfBuf);
   fs.writeFileSync(path.join(STORAGE_DIR, xlsxFile), xlsxBuf);
   invoice.pdf_file = pdfFile;
@@ -107,7 +141,7 @@ async function ensureArtifacts(invoice, leads) {
 
 async function runDaily(now = new Date(), { send = sendAccountsMail } = {}) {
   ensureStorage();
-  const summary = { day: null, invoice: null, retried: 0, backfilled: 0, failed_invoices: 0, recons_sent: 0, recons_failed: 0 };
+  const summary = { day: null, invoice: null, confirmation_invoice: null, retried: 0, backfilled: 0, failed_invoices: 0, recons_sent: 0, recons_failed: 0 };
 
   // 1. retry earlier failures first — heal any stranded invoice (row saved,
   // artifacts never written, e.g. a prior render crash) before (re)sending.
@@ -160,6 +194,36 @@ async function runDaily(now = new Date(), { send = sendAccountsMail } = {}) {
       if (invoice) {
         summary.invoice = { number: invoice.number, net: invoice.net, vat: invoice.vat, gross: invoice.gross, email_status: invoice.email_status };
       }
+    }
+  }
+
+  // 2b. deferred lender-confirmation invoice — claims stamped payable_full
+  // before today that haven't been billed yet (older unbilled stamps from a
+  // missed run are swept in automatically, so no lookback loop needed).
+  {
+    const { invoice, created } = await (async () => {
+      try {
+        return await generateConfirmationInvoice(now);
+      } catch (e) {
+        console.error(`confirmation invoice generation failed: ${e.message}`);
+        summary.failed_invoices += 1;
+        return { invoice: null, created: false };
+      }
+    })();
+    if (invoice && created) {
+      try {
+        await ensureArtifacts(invoice);
+        if (!(await emailInvoice(invoice, send))) summary.failed_invoices += 1;
+      } catch (e) {
+        invoice.email_status = 'failed';
+        invoice.email_error = e.message;
+        console.error(`invoice ${invoice.number} generation failed: ${e.message}`);
+        await invoice.save();
+        summary.failed_invoices += 1;
+      }
+    }
+    if (invoice) {
+      summary.confirmation_invoice = { number: invoice.number, net: invoice.net, vat: invoice.vat, gross: invoice.gross, email_status: invoice.email_status };
     }
   }
 

@@ -64,6 +64,12 @@ function applyStatusChanges(lead, changes, rateCard, { source, user } = {}) {
     record('payable_status', lead.payable_status, money.payable_status);
     lead.payable_status = money.payable_status;
   }
+  // Lender confirmation reached — start the confirmation-billing clock.
+  // Set once, never reset (a later status flip must not re-bill).
+  if (lead.payable_status === 'payable_full' && !lead.payable_full_at) {
+    record('payable_full_at', null, now);
+    lead.payable_full_at = now;
+  }
   lead.amounts = {
     upfront_due: money.upfront_due,
     confirmation_due: money.confirmation_due,

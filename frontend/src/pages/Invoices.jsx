@@ -36,7 +36,7 @@ export default function Invoices() {
       <Table striped withTableBorder highlightOnHover>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Invoice</Table.Th><Table.Th>Period</Table.Th><Table.Th>Net</Table.Th>
+            <Table.Th>Invoice</Table.Th><Table.Th>Type</Table.Th><Table.Th>Period</Table.Th><Table.Th>Net</Table.Th>
             <Table.Th>VAT</Table.Th><Table.Th>Total</Table.Th><Table.Th>Email</Table.Th>
             <Table.Th>Payment</Table.Th><Table.Th></Table.Th>
           </Table.Tr>
@@ -45,6 +45,11 @@ export default function Invoices() {
           {rows.map((i) => (
             <Table.Tr key={i._id}>
               <Table.Td>{i.number}</Table.Td>
+              <Table.Td>
+                <Badge color={i.type === 'confirmation' ? 'grape' : 'blue'} variant="light">
+                  {i.type === 'confirmation' ? 'Lender Conf.' : 'Daily'}
+                </Badge>
+              </Table.Td>
               <Table.Td>{fmtDay(i.period_end)}</Table.Td>
               <Table.Td>{fmtGBP(i.net)}</Table.Td>
               <Table.Td>{fmtGBP(i.vat)}</Table.Td>

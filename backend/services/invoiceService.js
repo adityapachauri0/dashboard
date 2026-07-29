@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
 const Invoice = require('../models/Invoice');
 const { Counter } = require('../models/Counter');
 
 const LINE_VIRGIN = 'PCP Claim Accepted Not Searched';
 const LINE_SEARCHED = 'PCP Claim Payable Previous Search';
+const LINE_CONFIRMATION = 'PCP Claim Payable Lender Confirmation';
 const VAT_RATE = 0.2;
 
 // How many past London days self-heal on each run: a stranded invoice/recon
@@ -116,13 +118,86 @@ async function generateDailyInvoice(now = new Date()) {
   return generateInvoiceForDay(londonDay(new Date(now.getTime() - 24 * 3600 * 1000)), now);
 }
 
+// ---- Deferred "Lender Confirmation" invoices (client spec 2026-07-29) ----
+// Searched claims that BlueLion later confirms with the lender flip to
+// payable_full; statusService stamps payable_full_at at that moment. The 9am
+// run bills every stamped-but-unbilled claim from before today — normally
+// just yesterday's, but a missed run's claims are swept up automatically.
+// Leads with no stamp (transitions before this feature deployed) never bill.
+
+const confirmationRate = () => Number(process.env.BLUELION_CONFIRMATION_RATE || 80);
+
+function confirmationFilter(now) {
+  return {
+    payable_full_at: { $lt: londonMidnightUtc(londonDay(now)) },
+    confirmation_invoice: null,
+    payable_status: 'payable_full',
+    search_status: 'searched',
+    cancelled: { $ne: true },
+    replaced_by_lead: null,
+  };
+}
+
+function buildConfirmationLines(qty, rate) {
+  const lines = [{ description: LINE_CONFIRMATION, qty, rate, amount: round2(qty * rate) }];
+  const net = lines[0].amount;
+  const vat = round2(net * VAT_RATE);
+  return { lines, net, vat, gross: round2(net + vat) };
+}
+
+async function previewConfirmationInvoice(now = new Date()) {
+  const leads = await Lead.find(confirmationFilter(now))
+    .sort({ payable_full_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
+  return { counts: { confirmed: leads.length }, calc: buildConfirmationLines(leads.length, confirmationRate()), leads };
+}
+
+// A lead claimed by an invoice _id that was never created (crash between the
+// claim below and Invoice.create) would otherwise be stranded unbilled —
+// release such claims so the next run re-bills them.
+async function releaseOrphanConfirmationClaims() {
+  const claimed = await Lead.distinct('confirmation_invoice', { confirmation_invoice: { $ne: null } });
+  if (!claimed.length) return 0;
+  const known = await Invoice.find({ _id: { $in: claimed } }).distinct('_id');
+  const knownSet = new Set(known.map(String));
+  const orphans = claimed.filter((id) => !knownSet.has(String(id)));
+  if (!orphans.length) return 0;
+  const r = await Lead.updateMany({ confirmation_invoice: { $in: orphans } }, { $unset: { confirmation_invoice: 1 } });
+  return r.modifiedCount;
+}
+
+async function generateConfirmationInvoice(now = new Date()) {
+  const day = londonDay(new Date(now.getTime() - 24 * 3600 * 1000));
+  const existing = await Invoice.findOne({ type: 'confirmation', period_end: day });
+  if (existing) return { invoice: existing, created: false, leads: null };
+  await releaseOrphanConfirmationClaims();
+  // Claim-first idempotency: atomically tag the billable leads with the id the
+  // invoice will be created under. A concurrent run claims nothing and exits;
+  // a crash after claiming is healed by releaseOrphanConfirmationClaims.
+  const invId = new mongoose.Types.ObjectId();
+  await Lead.updateMany(confirmationFilter(now), { $set: { confirmation_invoice: invId } });
+  const leads = await Lead.find({ confirmation_invoice: invId })
+    .sort({ payable_full_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
+  if (!leads.length) return { invoice: null, created: false, leads: [] };
+  const calc = buildConfirmationLines(leads.length, confirmationRate());
+  const { seq, number } = await nextInvoiceNumber();
+  const invoice = await Invoice.create({
+    _id: invId, number, seq, type: 'confirmation',
+    period_start: londonDay(leads[0].payable_full_at), period_end: day, invoice_date: now,
+    lines: calc.lines, net: calc.net, vat: calc.vat, gross: calc.gross,
+    email_to: process.env.INVOICE_TO_EMAIL || '',
+  });
+  return { invoice, created: true, leads };
+}
+
 const STORAGE_DIR = path.join(__dirname, '..', 'storage', 'invoices');
 const ensureStorage = () => fs.mkdirSync(STORAGE_DIR, { recursive: true });
 
 module.exports = {
-  LINE_VIRGIN, LINE_SEARCHED, PAY_LABELS, VAT_RATE, LOOKBACK_DAYS,
+  LINE_VIRGIN, LINE_SEARCHED, LINE_CONFIRMATION, PAY_LABELS, VAT_RATE, LOOKBACK_DAYS,
   round2, money, gbp, londonDay, ddmmyyyy, periodBounds, billableFilter,
   bluelionRates, buildLines, previewDailyInvoice, previewInvoiceForDay,
   generateDailyInvoice, generateInvoiceForDay,
+  confirmationRate, confirmationFilter, buildConfirmationLines,
+  previewConfirmationInvoice, generateConfirmationInvoice, releaseOrphanConfirmationClaims,
   nextInvoiceNumber, STORAGE_DIR, ensureStorage,
 };
