@@ -12,6 +12,7 @@ function createApp() {
   app.use('/api/v1', require('./routes/authRoutes'));
   app.use('/api/v1', require('./routes/affiliateRoutes'));
   app.use('/api/v1', require('./routes/leadIngest'));
+  app.use('/api/v1', require('./routes/outcomeRoutes'));
   app.use('/api/v1', require('./routes/leadRoutes'));
   app.use('/api/v1', require('./routes/webhookRoutes'));
   app.use('/api/v1', require('./routes/importRoutes'));

@@ -6,7 +6,7 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import dayjs from 'dayjs';
 import { api, getUser } from '../api';
-import StatusBadge, { PAYMENT_FILTER_OPTIONS, paymentFilterToParams, paymentStatus } from '../components/StatusBadge';
+import StatusBadge, { CLIENT_OUTCOME_FILTER_OPTIONS, PAYMENT_FILTER_OPTIONS, paymentFilterToParams, paymentStatus } from '../components/StatusBadge';
 
 const PAGE_SIZE = 50;
 const opts = (arr) => arr.map((v) => ({ value: v, label: v.replaceAll('_', ' ') }));
@@ -30,7 +30,7 @@ function nextUpdate(l) {
 export default function Leads() {
   const user = getUser();
   const isAdmin = user.role === 'admin';
-  const [filters, setFilters] = useState({ affiliate_id: null, initial_status: null, search_status: null, signature_status: null, payment: null, next_update: null, q: '' });
+  const [filters, setFilters] = useState({ affiliate_id: null, initial_status: null, search_status: null, signature_status: null, payment: null, client_outcome: null, next_update: null, q: '' });
   const [qInput, setQInput] = useState('');
   const [range, setRange] = useState([null, null]);
   const [page, setPage] = useState(1);
@@ -97,6 +97,8 @@ export default function Leads() {
         <Select placeholder="Payment status" clearable w={300}
           data={PAYMENT_FILTER_OPTIONS}
           value={filters.payment} onChange={set('payment')} />
+        <Select placeholder="Client outcome" clearable w={150}
+          data={CLIENT_OUTCOME_FILTER_OPTIONS} value={filters.client_outcome} onChange={set('client_outcome')} />
         <Select placeholder="Next update" clearable w={180}
           data={[
             { value: 'awaiting_confirmation', label: 'Awaiting confirmation' },
@@ -113,7 +115,7 @@ export default function Leads() {
           <Table.Tr>
             <Table.Th>Ref</Table.Th><Table.Th>Submitted</Table.Th><Table.Th>Affiliate</Table.Th>
             <Table.Th>Name</Table.Th><Table.Th>API status</Table.Th><Table.Th>Search</Table.Th>
-            <Table.Th>Signature</Table.Th><Table.Th>Payment status</Table.Th><Table.Th>Next update</Table.Th>
+            <Table.Th>Signature</Table.Th><Table.Th>Payment status</Table.Th><Table.Th>Client outcome</Table.Th><Table.Th>Next update</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -137,6 +139,15 @@ export default function Leads() {
               </Table.Td>
               <Table.Td>
                 {(() => { const p = paymentStatus(l); return <Badge color={p.color} variant="light">{p.label}</Badge>; })()}
+              </Table.Td>
+              <Table.Td>
+                {(l.client_outcomes || []).map((o) => (
+                  <Group key={o.client} gap={4} wrap="nowrap">
+                    <StatusBadge field="client_outcome" value={o.outcome} />
+                    {o.amount > 0 && <Text size="sm">£{o.amount.toFixed(2)}</Text>}
+                  </Group>
+                ))}
+                {!(l.client_outcomes || []).length && <Text size="sm" c="dimmed">—</Text>}
               </Table.Td>
               <Table.Td><Text size="sm" c="dimmed">{nextUpdate(l)}</Text></Table.Td>
             </Table.Tr>
@@ -191,6 +202,20 @@ export default function Leads() {
             <Text size="sm">
               Due: upfront £{(selected.amounts?.upfront_due || 0).toFixed(2)} + confirmation £{(selected.amounts?.confirmation_due || 0).toFixed(2)} = <b>£{(selected.amounts?.total_due || 0).toFixed(2)}</b>
             </Text>
+            {(selected.client_outcomes || []).length > 0 && (
+              <>
+                <Divider label="Client outcome" />
+                {selected.client_outcomes.map((o) => (
+                  <Group key={o.client} gap="xs">
+                    <Text size="sm" tt="capitalize"><b>{o.client}</b></Text>
+                    <StatusBadge field="client_outcome" value={o.outcome} />
+                    {o.amount > 0 && <Text size="sm">£{o.amount.toFixed(2)}</Text>}
+                    {o.reason && <Text size="sm" c="dimmed">{o.reason}</Text>}
+                    <Text size="xs" c="dimmed">received {dayjs(o.received_at).format('DD MMM YYYY HH:mm')}</Text>
+                  </Group>
+                ))}
+              </>
+            )}
 
             {isAdmin && (
               <>

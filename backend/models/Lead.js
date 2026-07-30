@@ -12,6 +12,23 @@ const historySchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Final outcome posted back per buying client (spec: outcome postback).
+// Separate lifecycle from payable_status — this is what the CLIENT decided/paid,
+// not what we owe the affiliate. One element per client, upserted in place.
+const clientOutcomeSchema = new mongoose.Schema(
+  {
+    client: { type: String, required: true },
+    // canonical snake_case: accepted / part_pay / full_pay / rejected — kept as a
+    // free string so "other final decision responses" don't bounce
+    outcome: { type: String, required: true },
+    reason: String,
+    amount: { type: Number, default: 0 },
+    occurred_at: Date,
+    received_at: { type: Date, required: true },
+  },
+  { _id: false }
+);
+
 const leadSchema = new mongoose.Schema(
   {
     ref: { type: String, required: true, unique: true },
@@ -66,6 +83,7 @@ const leadSchema = new mongoose.Schema(
     duplicate_of_ref: String,
     replaces_lead: { type: mongoose.Schema.Types.ObjectId, ref: 'Lead' },
     replaced_by_lead: { type: mongoose.Schema.Types.ObjectId, ref: 'Lead' },
+    client_outcomes: [clientOutcomeSchema],
     amounts: {
       upfront_due: { type: Number, default: 0 },
       confirmation_due: { type: Number, default: 0 },

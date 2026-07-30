@@ -16,6 +16,10 @@ function buildLeadFilter(query, user) {
     if (typeof query[f] === 'string' && query[f]) filter[f] = query[f];
   }
   if (query.needs_replacement === 'true') filter.needs_replacement = true;
+  // matches any client's outcome on the lead (single buying client today)
+  if (typeof query.client_outcome === 'string' && query.client_outcome) {
+    filter['client_outcomes.outcome'] = query.client_outcome;
+  }
   if (['required', 'supplied', 'closed'].includes(query.replacement_status)) {
     filter.replacement_status = query.replacement_status;
   }

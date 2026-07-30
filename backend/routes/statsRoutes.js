@@ -24,7 +24,7 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
   // "Needs attention" is all-time (an overdue signature from last month still needs
   // acting on), scoped to the user / selected affiliate but NOT the date range.
   const attentionMatch = buildLeadFilter({ affiliate_id: req.query.affiliate_id }, req.user);
-  const [[g], [a]] = await Promise.all([
+  const [[g], [a], outcomes] = await Promise.all([
     Lead.aggregate([
       { $match: match },
       {
@@ -87,6 +87,19 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
         },
       },
     ]),
+    // client-outcome rollup: counts + money by final outcome (60 full_pay £6,600 …)
+    Lead.aggregate([
+      { $match: match },
+      { $unwind: '$client_outcomes' },
+      {
+        $group: {
+          _id: '$client_outcomes.outcome',
+          count: { $sum: 1 },
+          amount: { $sum: { $ifNull: ['$client_outcomes.amount', 0] } },
+        },
+      },
+      { $sort: { amount: -1, _id: 1 } },
+    ]),
   ]);
   const s = g || { submitted: 0, accepted: 0, rejected: 0, pending: 0, awaiting_signature: 0, awaiting_confirmation: 0, total_due: 0 };
   const at = a || { overdue_signature: 0, needs_replacement: 0, overdue_replacements: 0, awaiting_confirmation: 0, possible_duplicates: 0 };
@@ -100,6 +113,7 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
     awaiting_signature: s.awaiting_signature,
     awaiting_confirmation: s.awaiting_confirmation,
     total_due: s.total_due,
+    client_outcomes: outcomes.map((o) => ({ outcome: o._id, count: o.count, amount: Math.round(o.amount * 100) / 100 })),
     outstanding_replacements: at.needs_replacement, // all-time, like the rest of attention
     attention: {
       overdue_signature: at.overdue_signature,

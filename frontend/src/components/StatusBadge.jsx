@@ -9,6 +9,7 @@ const COLORS = {
     payable_full: 'green', replaced: 'grape',
   },
   replacement_status: { none: 'gray', required: 'red', supplied: 'blue', closed: 'green' },
+  client_outcome: { accepted: 'teal', part_pay: 'orange', full_pay: 'green', rejected: 'red' },
 };
 export const LABELS = {
   payable: 'payable (100%)',
@@ -21,7 +22,16 @@ export const LABELS = {
   closed: 'replacement closed',
   virgin: 'virgin search',
   searched: 'already searched',
+  part_pay: 'part pay',
+  full_pay: 'full pay',
 };
+
+export const CLIENT_OUTCOME_FILTER_OPTIONS = [
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'part_pay', label: 'Part Pay' },
+  { value: 'full_pay', label: 'Full Pay' },
+  { value: 'rejected', label: 'Rejected' },
+];
 
 // Anthony's 8-option Payment Status (spec 2026-07-15). Replacement labels win
 // over money labels while an obligation exists; 'closed' renders as Supplied;

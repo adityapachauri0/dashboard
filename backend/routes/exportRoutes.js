@@ -22,6 +22,8 @@ const COLUMNS = [
   'replacement_status', 'replacement_requested_at', 'replacement_sla',
   'replacement_reason', 'cancelled_at',
   'upfront_due', 'confirmation_due', 'total_due', 'platform_ref', 'last_updated',
+  // appended at the END on purpose — Anthony's consumers read positionally
+  'client_outcome', 'client_outcome_amount', 'client_outcome_reason',
 ];
 
 async function fetchExportRows(query, user) {
@@ -53,6 +55,16 @@ async function fetchExportRows(query, user) {
     total_due: l.amounts?.total_due ?? 0,
     platform_ref: csvSafe(l.platform_ref),
     last_updated: l.last_updated?.toISOString() || '',
+    // one buying client today: "full_pay"; several: "bluelion: full_pay; other: rejected"
+    client_outcome: csvSafe(
+      (l.client_outcomes || []).length > 1
+        ? l.client_outcomes.map((o) => `${o.client}: ${o.outcome}`).join('; ')
+        : l.client_outcomes?.[0]?.outcome || ''
+    ),
+    client_outcome_amount: (l.client_outcomes || []).length
+      ? l.client_outcomes.reduce((t, o) => t + (o.amount || 0), 0)
+      : '',
+    client_outcome_reason: csvSafe((l.client_outcomes || []).map((o) => o.reason).filter(Boolean).join('; ')),
   }));
 }
 
