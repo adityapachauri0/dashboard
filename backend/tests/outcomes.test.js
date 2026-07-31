@@ -151,6 +151,6 @@ test('export appends client outcome columns at the end', async () => {
     .set('Authorization', `Bearer ${signToken(admin)}`);
   assert.strictEqual(res.status, 200);
   const [header, row] = res.text.trim().split('\n');
-  assert.ok(header.endsWith('client_outcome,client_outcome_amount,client_outcome_reason'));
+  assert.ok(header.endsWith('client_outcome,client_outcome_amount,client_outcome_reason,keycode'));
   assert.ok(row.includes('part_pay,39,DUPLICATE_CLIENT'));
 });

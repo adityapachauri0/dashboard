@@ -23,9 +23,14 @@ router.post('/leads', ingestLimiter, apiKeyAuth, async (req, res) => {
     return res.status(400).json({ error: 'replaces_ref must be a string' });
   }
 
+  if ('keycode' in body && typeof body.keycode !== 'string') {
+    return res.status(400).json({ error: 'keycode must be a string' });
+  }
+
   const submitted_at = new Date();
   const lead = new Lead({
     ref: await nextLeadRef(submitted_at),
+    keycode: body.keycode?.trim() || undefined,
     affiliate_id: req.affiliate._id,
     lead_source: req.affiliate.lead_source,
     brand: str(body.brand) || req.affiliate.brands?.[0] || '',

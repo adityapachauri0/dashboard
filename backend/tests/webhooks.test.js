@@ -148,3 +148,80 @@ test('webhook cancellation payloads open a cooling-off obligation', async () => 
     assert.strictEqual(updated.payable_status, 'not_payable');
   }
 });
+
+// ---- Model B: platform posts create leads keyed by supplier reference ----
+
+test('attempt post with unknown keycode + known brand CREATES the lead (billable when accepted)', async () => {
+  const aff = await Affiliate.create({
+    name: 'Claim3000', lead_source: 'claim3000', brands: ['claim3000'],
+    rate_card: { virgin_rate: 100, searched_upfront_rate: 25, searched_confirmation_rate: 0 },
+  });
+  const res = await request(createApp()).post('/api/v1/webhooks/platform').send({
+    keycode: 'C3K-0001', brand: 'Claim3000', reference: 'BL-991',
+    name: 'Jane Doe', email: 'jane@example.com', phone: '07700900001',
+    status: 'accepted', search: 'non-searched',
+  });
+  assert.strictEqual(res.body.created, true);
+  const lead = await Lead.findOne({ keycode: 'C3K-0001' });
+  assert.ok(lead.ref.startsWith('KB-'));
+  assert.strictEqual(lead.affiliate_id.toString(), aff._id.toString());
+  assert.strictEqual(lead.applicant_name, 'Jane Doe');
+  assert.strictEqual(lead.platform_ref, 'BL-991');
+  assert.strictEqual(lead.initial_status, 'accepted');
+  assert.strictEqual(lead.search_status, 'virgin');
+  assert.strictEqual(lead.amounts.total_due, 100);
+});
+
+test('later posts with the same keycode UPDATE the created lead, not duplicate it', async () => {
+  await Affiliate.create({ name: 'Claim3000', lead_source: 'claim3000', brands: ['claim3000'],
+    rate_card: { virgin_rate: 100, searched_upfront_rate: 25, searched_confirmation_rate: 0 } });
+  const app = createApp();
+  await request(app).post('/api/v1/webhooks/platform')
+    .send({ keycode: 'C3K-0002', brand: 'claim3000', status: 'accepted', search: 'searched' });
+  const upd = await request(app).post('/api/v1/webhooks/platform')
+    .send({ keycode: 'C3K-0002', brand: 'claim3000', signature: 'failed' });
+  assert.strictEqual(upd.body.created, false);
+  assert.strictEqual(upd.body.matched, true);
+  const leads = await Lead.find({ keycode: 'C3K-0002' });
+  assert.strictEqual(leads.length, 1);
+  assert.strictEqual(leads[0].signature_status, 'failed');
+  assert.strictEqual(leads[0].replacement_status, 'required'); // 72h SLA clock opened
+  assert.strictEqual(leads[0].amounts.total_due, 0);
+});
+
+test('cancellation post by keycode opens cooling-off obligation', async () => {
+  await Affiliate.create({ name: 'Claim3000', lead_source: 'claim3000', brands: ['claim3000'] });
+  const app = createApp();
+  await request(app).post('/api/v1/webhooks/platform')
+    .send({ keycode: 'C3K-0003', brand: 'claim3000', status: 'accepted' });
+  await request(app).post('/api/v1/webhooks/platform')
+    .send({ keycode: 'C3K-0003', brand: 'claim3000', cancelled: true });
+  const lead = await Lead.findOne({ keycode: 'C3K-0003' });
+  assert.strictEqual(lead.cancelled, true);
+  assert.strictEqual(lead.replacement_status, 'required');
+  assert.strictEqual(lead.replacement_reason, 'cooling_off');
+});
+
+test('unknown brand cannot create: event stored unmatched', async () => {
+  const res = await request(createApp()).post('/api/v1/webhooks/platform')
+    .send({ keycode: 'GHOST-1', brand: 'nobody', status: 'accepted' });
+  assert.strictEqual(res.body.matched, false);
+  assert.strictEqual(res.body.created, false);
+  assert.strictEqual(await Lead.countDocuments(), 0);
+  assert.strictEqual(await WebhookEvent.countDocuments({ matched_lead: null }), 1);
+});
+
+test('outcomes endpoint matches by supplier keycode via platform token', async () => {
+  await Affiliate.create({ name: 'Claim3000', lead_source: 'claim3000', brands: ['claim3000'] });
+  const app = createApp();
+  await request(app).post('/api/v1/webhooks/platform')
+    .send({ keycode: 'C3K-0004', brand: 'claim3000', status: 'accepted' });
+  process.env.WEBHOOK_TOKEN = 'tok-999';
+  const res = await request(app).post('/api/v1/outcomes?token=tok-999')
+    .send({ keycode: 'C3K-0004', outcome: 'Full Pay', amount: 110 });
+  delete process.env.WEBHOOK_TOKEN;
+  assert.strictEqual(res.status, 200);
+  const lead = await Lead.findOne({ keycode: 'C3K-0004' });
+  assert.strictEqual(lead.client_outcomes[0].outcome, 'full_pay');
+  assert.strictEqual(lead.client_outcomes[0].amount, 110);
+});

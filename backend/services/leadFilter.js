@@ -50,7 +50,7 @@ function buildLeadFilter(query, user) {
   if (query.to) filter.submitted_at.$lte = new Date(new Date(query.to).setHours(23, 59, 59, 999));
   if (typeof query.q === 'string' && query.q) {
     const rx = new RegExp(escapeRegex(query.q), 'i');
-    filter.$or = [{ ref: rx }, { applicant_name: rx }, { platform_ref: rx }];
+    filter.$or = [{ ref: rx }, { keycode: rx }, { applicant_name: rx }, { platform_ref: rx }];
   }
   return filter;
 }

@@ -121,7 +121,10 @@ export default function Leads() {
         <Table.Tbody>
           {data.rows.map((l) => (
             <Table.Tr key={l._id} style={{ cursor: 'pointer' }} onClick={() => openDetail(l._id)}>
-              <Table.Td><Code>{l.ref}</Code></Table.Td>
+              <Table.Td>
+                <Code>{l.ref}</Code>
+                {l.keycode && <Text size="xs" c="dimmed">{l.keycode}</Text>}
+              </Table.Td>
               <Table.Td>{dayjs(l.submitted_at).format('DD MMM HH:mm')}</Table.Td>
               <Table.Td>{l.affiliate_id?.name}</Table.Td>
               <Table.Td>
@@ -180,7 +183,7 @@ export default function Leads() {
               )}
             </Group>
             <Text size="sm">
-              Affiliate: <b>{selected.affiliate_id?.name}</b> · Brand: {selected.brand || '—'} · Platform ref: {selected.platform_ref || '—'}
+              Affiliate: <b>{selected.affiliate_id?.name}</b> · Brand: {selected.brand || '—'} · Keycode: {selected.keycode || '—'} · Platform ref: {selected.platform_ref || '—'}
             </Text>
             <Text size="sm">
               Submitted {dayjs(selected.submitted_at).format('DD MMM YYYY HH:mm')} · Signature deadline {selected.signature_deadline ? dayjs(selected.signature_deadline).format('DD MMM YYYY HH:mm') : '—'}

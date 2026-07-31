@@ -23,7 +23,7 @@ const COLUMNS = [
   'replacement_reason', 'cancelled_at',
   'upfront_due', 'confirmation_due', 'total_due', 'platform_ref', 'last_updated',
   // appended at the END on purpose — Anthony's consumers read positionally
-  'client_outcome', 'client_outcome_amount', 'client_outcome_reason',
+  'client_outcome', 'client_outcome_amount', 'client_outcome_reason', 'keycode',
 ];
 
 async function fetchExportRows(query, user) {
@@ -65,6 +65,7 @@ async function fetchExportRows(query, user) {
       ? l.client_outcomes.reduce((t, o) => t + (o.amount || 0), 0)
       : '',
     client_outcome_reason: csvSafe((l.client_outcomes || []).map((o) => o.reason).filter(Boolean).join('; ')),
+    keycode: csvSafe(l.keycode),
   }));
 }
 

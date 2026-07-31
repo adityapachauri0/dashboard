@@ -32,6 +32,9 @@ const clientOutcomeSchema = new mongoose.Schema(
 const leadSchema = new mongoose.Schema(
   {
     ref: { type: String, required: true, unique: true },
+    // supplier's own unique lead reference (Model B join key: the client platform
+    // posts attempts/returns/outcomes keyed by this, unique per supplier)
+    keycode: { type: String, index: true },
     affiliate_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Affiliate', required: true, index: true },
     lead_source: String,
     brand: String,
@@ -92,6 +95,12 @@ const leadSchema = new mongoose.Schema(
     history: [historySchema],
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'last_updated' } }
+);
+
+// one keycode per supplier — the race-guard for concurrent webhook auto-creates
+leadSchema.index(
+  { affiliate_id: 1, keycode: 1 },
+  { unique: true, partialFilterExpression: { keycode: { $type: 'string' } } }
 );
 
 module.exports = mongoose.model('Lead', leadSchema);

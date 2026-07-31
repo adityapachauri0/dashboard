@@ -62,9 +62,12 @@ router.post('/outcomes', outcomeLimiter, outcomeAuth, async (req, res) => {
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : undefined;
 
   // suppliers are scoped to their own leads — one supplier can't write another's;
-  // the client platform (token auth) can post outcomes for any lead
-  const scope = req.platformAuth ? { ref: keycode } : { ref: keycode, affiliate_id: req.affiliate._id };
-  const lead = await Lead.findOne(scope);
+  // the client platform (token auth) can post outcomes for any lead.
+  // keycode = supplier's own reference (Model B) or our KB ref — both accepted.
+  const base = req.platformAuth ? {} : { affiliate_id: req.affiliate._id };
+  const lead =
+    (await Lead.findOne({ ...base, ref: keycode })) ||
+    (await Lead.findOne({ ...base, keycode }));
   if (!lead) return res.status(404).json({ error: `keycode ${keycode} not found` });
 
   const now = new Date();
