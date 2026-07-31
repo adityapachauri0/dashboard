@@ -94,6 +94,26 @@ test('scoping and validation: wrong affiliate 404, bad inputs 400, bad key 401',
   assert.strictEqual(badKey.status, 401);
 });
 
+test('platform token can post outcomes for any lead; bad or unconfigured token rejected', async () => {
+  const { lead } = await seed();
+  const app = createApp();
+  process.env.WEBHOOK_TOKEN = 'tok-123';
+  const ok = await request(app).post('/api/v1/outcomes?token=tok-123')
+    .send({ keycode: lead.ref, outcome: 'Part Pay', amount: 30 });
+  assert.strictEqual(ok.status, 200);
+  assert.strictEqual(ok.body.outcome, 'part_pay');
+  const saved = await Lead.findOne({ ref: lead.ref });
+  assert.strictEqual(saved.client_outcomes[0].amount, 30);
+  assert.strictEqual(saved.history.at(-1).source, 'webhook');
+  const bad = await request(app).post('/api/v1/outcomes?token=wrong')
+    .send({ keycode: lead.ref, outcome: 'full_pay' });
+  assert.strictEqual(bad.status, 401);
+  delete process.env.WEBHOOK_TOKEN;
+  const unconfigured = await request(app).post('/api/v1/outcomes?token=tok-123')
+    .send({ keycode: lead.ref, outcome: 'full_pay' });
+  assert.strictEqual(unconfigured.status, 401);
+});
+
 test('leads list filters by client_outcome and summary rolls up counts + money', async () => {
   const { affA, keyA } = await seed();
   await Lead.create({ ref: 'KB-2026-000002', affiliate_id: affA._id, submitted_at: new Date('2026-07-05T11:00:00Z') });

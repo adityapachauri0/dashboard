@@ -1,10 +1,30 @@
 const express = require('express');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const Lead = require('../models/Lead');
 const { apiKeyAuth } = require('../middleware/apiKey');
 
 const router = express.Router();
 const outcomeLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
+
+// Two callers: suppliers (X-API-Key, scoped to their own leads) and the buying
+// client's platform (?token= shared secret, same WEBHOOK_TOKEN as the status
+// webhook, any lead). Sets req.affiliate or req.platformAuth.
+function outcomeAuth(req, res, next) {
+  const token = req.query.token;
+  if (token !== undefined) {
+    const configured = process.env.WEBHOOK_TOKEN;
+    if (!configured) return res.status(401).json({ error: 'token auth not configured' });
+    const a = Buffer.from(String(token));
+    const b = Buffer.from(configured);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: 'bad token' });
+    }
+    req.platformAuth = true;
+    return next();
+  }
+  return apiKeyAuth(req, res, next);
+}
 
 // ponytail: single buying client today; suppliers may omit `client` until a second one exists
 const DEFAULT_CLIENT = 'bluelion';
@@ -15,7 +35,7 @@ const canon = (v) => String(v).trim().toLowerCase().replace(/[\s-]+/g, '_');
 // Suppliers post the buying client's FINAL decision for a lead they sent us.
 // Idempotent per (lead, client): a re-post updates that client's outcome in place.
 // Deliberately does NOT touch payable_status / money — separate lifecycles.
-router.post('/outcomes', outcomeLimiter, apiKeyAuth, async (req, res) => {
+router.post('/outcomes', outcomeLimiter, outcomeAuth, async (req, res) => {
   const body = req.body || {};
   const keycode = typeof body.keycode === 'string' ? body.keycode.trim() : '';
   if (!keycode) return res.status(400).json({ error: 'keycode required' });
@@ -41,8 +61,10 @@ router.post('/outcomes', outcomeLimiter, apiKeyAuth, async (req, res) => {
   }
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : undefined;
 
-  // scoped to the posting supplier's own leads — one supplier can't write another's
-  const lead = await Lead.findOne({ ref: keycode, affiliate_id: req.affiliate._id });
+  // suppliers are scoped to their own leads — one supplier can't write another's;
+  // the client platform (token auth) can post outcomes for any lead
+  const scope = req.platformAuth ? { ref: keycode } : { ref: keycode, affiliate_id: req.affiliate._id };
+  const lead = await Lead.findOne(scope);
   if (!lead) return res.status(404).json({ error: `keycode ${keycode} not found` });
 
   const now = new Date();
@@ -63,7 +85,7 @@ router.post('/outcomes', outcomeLimiter, apiKeyAuth, async (req, res) => {
       field: `client_outcome:${client}`,
       from: summarise(existing),
       to: summarise(next),
-      source: 'api',
+      source: req.platformAuth ? 'webhook' : 'api',
     });
   }
   if (existing) Object.assign(existing, next);
