@@ -240,3 +240,26 @@ test('ping endpoint: 200 on valid token (GET and POST), 401 bad token, stores no
   assert.strictEqual(await Lead.countDocuments(), 0);
   delete process.env.WEBHOOK_TOKEN;
 });
+
+test('one-endpoint integration: single post carries status + search + commercial outcome', async () => {
+  await Affiliate.create({ name: 'Claim3000', lead_source: 'claim3000', brands: ['claim3000'],
+    rate_card: { virgin_rate: 100, searched_upfront_rate: 25, searched_confirmation_rate: 0 } });
+  const app = createApp();
+  const res = await request(app).post('/api/v1/webhooks/platform').send({
+    keycode: 'C3K-0100', brand: 'claim3000', status: 'accepted', search: 'non-searched',
+    outcome: 'Full Pay', amount: 110,
+  });
+  assert.strictEqual(res.body.created, true);
+  const lead = await Lead.findOne({ keycode: 'C3K-0100' });
+  assert.strictEqual(lead.initial_status, 'accepted');
+  assert.strictEqual(lead.amounts.total_due, 100);
+  assert.strictEqual(lead.client_outcomes[0].outcome, 'full_pay');
+  assert.strictEqual(lead.client_outcomes[0].amount, 110);
+  // outcome-only follow-up to the same endpoint updates in place
+  await request(app).post('/api/v1/webhooks/platform')
+    .send({ keycode: 'C3K-0100', brand: 'claim3000', outcome: 'rejected', amount: 0, reason: 'CANCELLED' });
+  const after = await Lead.findOne({ keycode: 'C3K-0100' });
+  assert.strictEqual(after.client_outcomes.length, 1);
+  assert.strictEqual(after.client_outcomes[0].outcome, 'rejected');
+  assert.strictEqual(after.client_outcomes[0].reason, 'CANCELLED');
+});

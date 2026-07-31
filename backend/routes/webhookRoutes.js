@@ -9,6 +9,7 @@ const { canonicalFromPayload, normalizeEmail, normalizePhone } = require('../ser
 const { applyStatusChanges } = require('../services/statusService');
 const { propagateReplacementOutcome } = require('../services/replacementService');
 const { nextLeadRef } = require('../models/Counter');
+const { applyClientOutcome, canon } = require('../services/clientOutcome');
 
 const router = express.Router();
 
@@ -21,6 +22,21 @@ async function applyEventToLead(event, lead) {
   const affiliate = await Affiliate.findById(lead.affiliate_id);
   // orphaned affiliate -> zero rate card; computeMoney treats missing rates as 0
   applyStatusChanges(lead, changes, affiliate?.rate_card || {}, { source: 'webhook' });
+  // one-endpoint integration: a post may carry the commercial outcome too
+  const p = event.payload;
+  if (typeof p.outcome === 'string' && p.outcome.trim()) {
+    const amt = Number(p.amount);
+    applyClientOutcome(
+      lead,
+      {
+        client: typeof p.client === 'string' && p.client.trim() ? canon(p.client).slice(0, 40) : 'bluelion',
+        outcome: canon(p.outcome).slice(0, 40),
+        amount: Number.isFinite(amt) && amt >= 0 ? Math.round(amt * 100) / 100 : undefined,
+        reason: typeof p.reason === 'string' ? p.reason.trim().slice(0, 500) : undefined,
+      },
+      { source: 'webhook' }
+    );
+  }
   await lead.save();
   await propagateReplacementOutcome(lead, { source: 'webhook' });
   event.matched_lead = lead._id;

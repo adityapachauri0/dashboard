@@ -4,6 +4,8 @@ const rateLimit = require('express-rate-limit');
 const Lead = require('../models/Lead');
 const { apiKeyAuth } = require('../middleware/apiKey');
 
+const { applyClientOutcome, canon } = require('../services/clientOutcome');
+
 const router = express.Router();
 const outcomeLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
 
@@ -28,9 +30,6 @@ function outcomeAuth(req, res, next) {
 
 // ponytail: single buying client today; suppliers may omit `client` until a second one exists
 const DEFAULT_CLIENT = 'bluelion';
-
-// "Full Pay" / "part-pay" / "FULL_PAY" -> "full_pay"
-const canon = (v) => String(v).trim().toLowerCase().replace(/[\s-]+/g, '_');
 
 // Suppliers post the buying client's FINAL decision for a lead they sent us.
 // Idempotent per (lead, client): a re-post updates that client's outcome in place.
@@ -70,32 +69,15 @@ router.post('/outcomes', outcomeLimiter, outcomeAuth, async (req, res) => {
     (await Lead.findOne({ ...base, keycode }));
   if (!lead) return res.status(404).json({ error: `keycode ${keycode} not found` });
 
-  const now = new Date();
-  const existing = lead.client_outcomes.find((o) => o.client === client);
-  const summarise = (o) => (o ? `${o.outcome}${o.amount ? ` £${o.amount}` : ''}` : null);
-  const next = {
-    client,
-    outcome,
-    reason: reason !== undefined ? reason : existing?.reason,
-    amount: amount !== undefined ? amount : existing?.amount ?? 0,
-    occurred_at: occurred_at !== undefined ? occurred_at : existing?.occurred_at,
-    received_at: now,
-  };
-  const changed = !existing || summarise(existing) !== summarise(next) || (existing.reason || '') !== (next.reason || '');
-  if (changed) {
-    lead.history.push({
-      at: now,
-      field: `client_outcome:${client}`,
-      from: summarise(existing),
-      to: summarise(next),
-      source: req.platformAuth ? 'webhook' : 'api',
-    });
-  }
-  if (existing) Object.assign(existing, next);
-  else lead.client_outcomes.push(next);
+  const updated = lead.client_outcomes.some((o) => o.client === client);
+  const { next } = applyClientOutcome(
+    lead,
+    { client, outcome, amount, reason, occurred_at },
+    { source: req.platformAuth ? 'webhook' : 'api' }
+  );
   await lead.save();
 
-  res.json({ ref: lead.ref, client, outcome: next.outcome, amount: next.amount, updated: !!existing });
+  res.json({ ref: lead.ref, client, outcome: next.outcome, amount: next.amount, updated });
 });
 
 module.exports = router;
