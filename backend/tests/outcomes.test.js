@@ -154,3 +154,33 @@ test('export appends client outcome columns at the end', async () => {
   assert.ok(header.endsWith('client_outcome,client_outcome_amount,client_outcome_reason,keycode'));
   assert.ok(row.includes('part_pay,39,DUPLICATE_CLIENT'));
 });
+
+test('affiliates never see client-side money: list, detail, summary, export scrubbed; admin sees all', async () => {
+  const { affA, keyA, lead } = await seed();
+  const admin = await User.create({ email: 'admin@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'admin' });
+  const affUser = await User.create({ email: 'aff@x.com', password_hash: bcrypt.hashSync('p', 10), role: 'affiliate', affiliate_id: affA._id });
+  const app = createApp();
+  await request(app).post('/api/v1/outcomes').set('X-API-Key', keyA)
+    .send({ keycode: lead.ref, outcome: 'full_pay', amount: 110 });
+
+  const affList = await request(app).get('/api/v1/dashboard/leads').set('Authorization', `Bearer ${signToken(affUser)}`);
+  assert.strictEqual(affList.body.rows[0].client_outcomes[0].outcome, 'full_pay');
+  assert.strictEqual(affList.body.rows[0].client_outcomes[0].amount, undefined);
+
+  const affDetail = await request(app).get(`/api/v1/dashboard/leads/${lead._id}`).set('Authorization', `Bearer ${signToken(affUser)}`);
+  assert.strictEqual(affDetail.body.client_outcomes[0].amount, undefined);
+  assert.ok(affDetail.body.history.every((h) => !h.field.startsWith('client_outcome')));
+
+  const affSummary = await request(app).get('/api/v1/dashboard/summary?from=2026-07-05&to=2026-07-05').set('Authorization', `Bearer ${signToken(affUser)}`);
+  assert.deepStrictEqual(affSummary.body.client_outcomes, [{ outcome: 'full_pay', count: 1 }]);
+
+  const affCsv = await request(app).get('/api/v1/dashboard/export.csv').set('Authorization', `Bearer ${signToken(affUser)}`);
+  assert.ok(affCsv.text.includes('full_pay,,'));
+  assert.ok(!affCsv.text.includes('110'));
+
+  const admDetail = await request(app).get(`/api/v1/dashboard/leads/${lead._id}`).set('Authorization', `Bearer ${signToken(admin)}`);
+  assert.strictEqual(admDetail.body.client_outcomes[0].amount, 110);
+  assert.ok(admDetail.body.history.some((h) => h.field === 'client_outcome:bluelion'));
+  const admSummary = await request(app).get('/api/v1/dashboard/summary?from=2026-07-05&to=2026-07-05').set('Authorization', `Bearer ${signToken(admin)}`);
+  assert.deepStrictEqual(admSummary.body.client_outcomes, [{ outcome: 'full_pay', count: 1, amount: 110 }]);
+});

@@ -61,9 +61,11 @@ async function fetchExportRows(query, user) {
         ? l.client_outcomes.map((o) => `${o.client}: ${o.outcome}`).join('; ')
         : l.client_outcomes?.[0]?.outcome || ''
     ),
-    client_outcome_amount: (l.client_outcomes || []).length
-      ? l.client_outcomes.reduce((t, o) => t + (o.amount || 0), 0)
-      : '',
+    // client-side money is admin-only; column kept (blank) so positions hold
+    client_outcome_amount:
+      user.role !== 'affiliate' && (l.client_outcomes || []).length
+        ? l.client_outcomes.reduce((t, o) => t + (o.amount || 0), 0)
+        : '',
     client_outcome_reason: csvSafe((l.client_outcomes || []).map((o) => o.reason).filter(Boolean).join('; ')),
     keycode: csvSafe(l.keycode),
   }));

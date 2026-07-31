@@ -5,6 +5,7 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { applyStatusChanges } = require('../services/statusService');
 const { buildLeadFilter } = require('../services/leadFilter');
 const { propagateReplacementOutcome } = require('../services/replacementService');
+const { scrubClientMoney, isAffiliate } = require('../services/visibility');
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.get('/dashboard/leads', requireAuth, async (req, res) => {
     Lead.find(filter).sort({ submitted_at: -1 }).skip((page - 1) * limit).limit(limit)
       .select('-payload -history').populate('affiliate_id', 'name lead_source').lean(),
   ]);
+  if (isAffiliate(req.user)) rows.forEach(scrubClientMoney);
   res.json({ rows, total });
 });
 
@@ -30,6 +32,7 @@ router.get('/dashboard/leads/:id', requireAuth, async (req, res) => {
   if (req.user.role === 'affiliate' && String(lead.affiliate_id._id) !== String(req.user.affiliate_id)) {
     return res.status(404).json({ error: 'not found' });
   }
+  if (isAffiliate(req.user)) scrubClientMoney(lead);
   res.json(lead);
 });
 

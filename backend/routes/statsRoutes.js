@@ -113,7 +113,12 @@ router.get('/dashboard/summary', requireAuth, async (req, res) => {
     awaiting_signature: s.awaiting_signature,
     awaiting_confirmation: s.awaiting_confirmation,
     total_due: s.total_due,
-    client_outcomes: outcomes.map((o) => ({ outcome: o._id, count: o.count, amount: Math.round(o.amount * 100) / 100 })),
+    // suppliers see decision counts only — client-side money is admin-only
+    client_outcomes: outcomes.map((o) =>
+      req.user.role === 'affiliate'
+        ? { outcome: o._id, count: o.count }
+        : { outcome: o._id, count: o.count, amount: Math.round(o.amount * 100) / 100 }
+    ),
     outstanding_replacements: at.needs_replacement, // all-time, like the rest of attention
     attention: {
       overdue_signature: at.overdue_signature,

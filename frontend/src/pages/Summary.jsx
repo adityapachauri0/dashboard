@@ -74,30 +74,33 @@ export default function Summary() {
           <Stat label="Total due" value={`£${(summary.total_due || 0).toFixed(2)}`} />
         </SimpleGrid>
       )}
-      {(summary?.client_outcomes || []).length > 0 && (
-        <Card withBorder p="md" mb="lg">
-          <Text size="xs" c="dimmed" tt="uppercase" mb="xs">Client outcomes</Text>
-          <Table>
-            <Table.Thead>
-              <Table.Tr><Table.Th>Outcome</Table.Th><Table.Th>Leads</Table.Th><Table.Th>Amount</Table.Th></Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {summary.client_outcomes.map((o) => (
-                <Table.Tr key={o.outcome}>
-                  <Table.Td tt="capitalize">{o.outcome.replaceAll('_', ' ')}</Table.Td>
-                  <Table.Td>{o.count}</Table.Td>
-                  <Table.Td>£{o.amount.toFixed(2)}</Table.Td>
+      {(summary?.client_outcomes || []).length > 0 && (() => {
+        const showMoney = summary.client_outcomes.some((o) => o.amount !== undefined);
+        return (
+          <Card withBorder p="md" mb="lg">
+            <Text size="xs" c="dimmed" tt="uppercase" mb="xs">Client outcomes</Text>
+            <Table>
+              <Table.Thead>
+                <Table.Tr><Table.Th>Outcome</Table.Th><Table.Th>Leads</Table.Th>{showMoney && <Table.Th>Amount</Table.Th>}</Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {summary.client_outcomes.map((o) => (
+                  <Table.Tr key={o.outcome}>
+                    <Table.Td tt="capitalize">{o.outcome.replaceAll('_', ' ')}</Table.Td>
+                    <Table.Td>{o.count}</Table.Td>
+                    {showMoney && <Table.Td>£{(o.amount || 0).toFixed(2)}</Table.Td>}
+                  </Table.Tr>
+                ))}
+                <Table.Tr fw={700}>
+                  <Table.Td>Total</Table.Td>
+                  <Table.Td>{summary.client_outcomes.reduce((t, o) => t + o.count, 0)}</Table.Td>
+                  {showMoney && <Table.Td>£{summary.client_outcomes.reduce((t, o) => t + (o.amount || 0), 0).toFixed(2)}</Table.Td>}
                 </Table.Tr>
-              ))}
-              <Table.Tr fw={700}>
-                <Table.Td>Total</Table.Td>
-                <Table.Td>{summary.client_outcomes.reduce((t, o) => t + o.count, 0)}</Table.Td>
-                <Table.Td>£{summary.client_outcomes.reduce((t, o) => t + o.amount, 0).toFixed(2)}</Table.Td>
-              </Table.Tr>
-            </Table.Tbody>
-          </Table>
-        </Card>
-      )}
+              </Table.Tbody>
+            </Table>
+          </Card>
+        );
+      })()}
       {daily.length > 1 && (
         <Card withBorder p="md" mb="lg">
           <Text size="xs" c="dimmed" tt="uppercase" mb="xs">Leads per day</Text>
