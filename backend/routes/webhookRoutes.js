@@ -73,6 +73,19 @@ async function createLeadFromEvent(event, affiliate, keycode) {
   }
 }
 
+// Integrator liveness ping: proves the API is up and the token is valid.
+// Touches no data, stores no event. GET or POST.
+router.all('/webhooks/platform/ping', webhookLimiter, (req, res) => {
+  const configured = process.env.WEBHOOK_TOKEN;
+  if (!configured) return res.status(503).json({ error: 'webhook disabled: WEBHOOK_TOKEN not configured' });
+  const a = Buffer.from(String(req.query.token || ''));
+  const b = Buffer.from(configured);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: 'bad token' });
+  }
+  res.json({ ok: true, service: 'click2leads-platform-api' });
+});
+
 router.post('/webhooks/platform', webhookLimiter, async (req, res) => {
   const configured = process.env.WEBHOOK_TOKEN;
   if (!configured) {

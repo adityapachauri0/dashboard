@@ -225,3 +225,18 @@ test('outcomes endpoint matches by supplier keycode via platform token', async (
   assert.strictEqual(lead.client_outcomes[0].outcome, 'full_pay');
   assert.strictEqual(lead.client_outcomes[0].amount, 110);
 });
+
+test('ping endpoint: 200 on valid token (GET and POST), 401 bad token, stores nothing', async () => {
+  process.env.WEBHOOK_TOKEN = 'ping-tok';
+  const app = createApp();
+  const get = await request(app).get('/api/v1/webhooks/platform/ping?token=ping-tok');
+  assert.strictEqual(get.status, 200);
+  assert.strictEqual(get.body.ok, true);
+  const post = await request(app).post('/api/v1/webhooks/platform/ping?token=ping-tok').send({ anything: 'ignored' });
+  assert.strictEqual(post.status, 200);
+  const bad = await request(app).get('/api/v1/webhooks/platform/ping?token=nope');
+  assert.strictEqual(bad.status, 401);
+  assert.strictEqual(await WebhookEvent.countDocuments(), 0);
+  assert.strictEqual(await Lead.countDocuments(), 0);
+  delete process.env.WEBHOOK_TOKEN;
+});
