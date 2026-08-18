@@ -201,3 +201,35 @@ test('admin still sees the client amount everywhere', async () => {
   const csv = await request(app).get('/api/v1/dashboard/export.csv').set('Authorization', token);
   assert.ok(csv.text.includes(String(CLIENT_PAID)), 'admin lost CSV amount');
 });
+
+// The outbound path: the daily recon email + workbook leave our system entirely,
+// so no route guard covers them. They must be built from the affiliate's OWN
+// rate card — reconExcel also exports BlueLion builders from the same module.
+test('daily reconciliation email and workbook carry no client money', async () => {
+  const { buildAffiliateRecons } = require('../services/affiliateRecon');
+  const aff = await Affiliate.create({
+    name: 'Supplier', lead_source: 'supplier', active: true, contact_email: 's@supplier.test',
+    rate_card: { virgin_rate: SUPPLIER_RATE, searched_upfront_rate: 25, searched_confirmation_rate: 0 },
+  });
+  await Lead.create({
+    ref: 'KB-2026-000009', affiliate_id: aff._id, lead_source: 'supplier',
+    submitted_at: new Date('2026-07-18T10:00:00Z'), initial_status: 'accepted',
+    search_status: 'virgin', signature_status: 'passed', payable_status: 'payable',
+    amounts: { upfront_due: SUPPLIER_RATE, confirmation_due: 0, total_due: SUPPLIER_RATE },
+    payload: PLATFORM_BODY,
+    client_outcomes: [
+      { client: 'bluelion', outcome: 'full_pay', amount: CLIENT_PAID, received_at: new Date('2026-07-19') },
+    ],
+  });
+  const recons = await buildAffiliateRecons(new Date('2026-07-19T08:00:00Z'));
+  assert.strictEqual(recons.length, 1, 'recon not built');
+  const r = recons[0];
+  assert.strictEqual(r.to, 's@supplier.test');
+  assert.ok(r.text.includes(String(SUPPLIER_RATE)), 'own rate should be in the email');
+  assert.ok(!r.text.includes(String(CLIENT_PAID)), 'client amount reachable in recon email');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(r.xlsx);
+  const cells = [];
+  wb.eachSheet((ws) => ws.eachRow((row) => row.eachCell((c) => cells.push(String(c.value ?? '')))));
+  assert.ok(!cells.join('|').includes(String(CLIENT_PAID)), 'client amount reachable in recon workbook');
+});
