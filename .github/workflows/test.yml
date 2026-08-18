@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # matches the VPS (v20.20.0)
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # mongodb-memory-server downloads a ~150MB mongod on first run;
+      # cache it so runs stay fast and don't depend on fastdl being up
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+
+      - run: npm ci
+      - run: npm test
