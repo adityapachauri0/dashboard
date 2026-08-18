@@ -77,7 +77,10 @@ router.post('/outcomes', outcomeLimiter, outcomeAuth, async (req, res) => {
   );
   await lead.save();
 
-  res.json({ ref: lead.ref, client, outcome: next.outcome, amount: next.amount, updated });
+  // next.amount falls back to the STORED amount when the caller sent none, so
+  // echoing it would hand a supplier the client's figure. Suppliers get their
+  // own input back (absent if they sent none); the platform gets the merged value.
+  res.json({ ref: lead.ref, client, outcome: next.outcome, amount: req.platformAuth ? next.amount : amount, updated });
 });
 
 module.exports = router;

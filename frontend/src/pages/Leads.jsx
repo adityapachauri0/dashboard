@@ -252,8 +252,12 @@ export default function Leads() {
               ))}
             </Timeline>
 
-            <Divider label="Raw payload" />
-            <Code block>{JSON.stringify(selected.payload, null, 2)}</Code>
+            {selected.payload && (
+              <>
+                <Divider label="Raw payload" />
+                <Code block>{JSON.stringify(selected.payload, null, 2)}</Code>
+              </>
+            )}
           </Stack>
         )}
       </Drawer>
