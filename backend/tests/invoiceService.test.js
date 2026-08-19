@@ -80,7 +80,7 @@ test('generateDailyInvoice numbers sequentially, idempotent, zero-day null', asy
   await seed({});
   const first = await svc.generateDailyInvoice(NOW);
   assert.strictEqual(first.created, true);
-  assert.strictEqual(first.invoice.number, 'BlueLion 001');
+  assert.strictEqual(first.invoice.number, 'BlueLion 0001');
   assert.strictEqual(first.invoice.period_end, '2026-07-18');
   assert.strictEqual(first.leads.length, 1);
   const again = await svc.generateDailyInvoice(NOW);
@@ -95,7 +95,7 @@ test('generateDailyInvoice returns the existing invoice when create loses a dupl
   // Uses a different number/seq than the Counter will hand out below, so the E11000 below is
   // unambiguously the (type, period_end) unique index, not the (number) one.
   const winner = await Invoice.create({
-    number: 'BlueLion 002', seq: 2, type: 'daily', period_start: '2026-07-18', period_end: '2026-07-18',
+    number: 'BlueLion 0002', seq: 2, type: 'daily', period_start: '2026-07-18', period_end: '2026-07-18',
     invoice_date: NOW, lines: [], net: 0, vat: 0, gross: 0, email_to: '',
   });
 
@@ -153,7 +153,7 @@ test('generateConfirmationInvoice claims leads, correct totals, idempotent per d
   const r = await svc.generateConfirmationInvoice(NOW);
   assert.strictEqual(r.created, true);
   assert.strictEqual(r.invoice.type, 'confirmation');
-  assert.strictEqual(r.invoice.number, 'BlueLion 001');
+  assert.strictEqual(r.invoice.number, 'BlueLion 0001');
   assert.strictEqual(r.invoice.net, 160);
   assert.strictEqual(r.invoice.vat, 32);
   assert.strictEqual(r.invoice.gross, 192);
@@ -170,7 +170,7 @@ test('empty confirmation run creates nothing and burns no invoice number', async
   assert.strictEqual(r.invoice, null);
   await seed({});
   const daily = await svc.generateDailyInvoice(NOW);
-  assert.strictEqual(daily.invoice.number, 'BlueLion 001');
+  assert.strictEqual(daily.invoice.number, 'BlueLion 0001');
 });
 
 test('missed-run stamps are swept into the next confirmation invoice', async () => {

@@ -86,7 +86,7 @@ async function previewDailyInvoice(now = new Date()) {
 
 async function nextInvoiceNumber() {
   const c = await Counter.findByIdAndUpdate('invoice_bluelion', { $inc: { seq: 1 } }, { new: true, upsert: true });
-  return { seq: c.seq, number: `BlueLion ${String(c.seq).padStart(3, '0')}` };
+  return { seq: c.seq, number: `BlueLion ${String(c.seq).padStart(4, '0')}` };
 }
 
 async function generateInvoiceForDay(day, invoiceDate = new Date()) {

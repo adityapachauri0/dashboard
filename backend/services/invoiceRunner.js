@@ -125,9 +125,9 @@ async function ensureArtifacts(invoice, leads) {
       : await Lead.find(billableFilter(periodBounds(invoice.period_end)))
         .sort({ submitted_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
   }
-  const seq3 = String(invoice.seq).padStart(3, '0');
-  const pdfFile = `BlueLion-${seq3}.pdf`;
-  const xlsxFile = `BlueLion-${seq3}.xlsx`;
+  const seq4 = String(invoice.seq).padStart(4, '0');
+  const pdfFile = `BlueLion-${seq4}.pdf`;
+  const xlsxFile = `BlueLion-${seq4}.xlsx`;
   const pdfBuf = await invoicePdf.renderInvoicePdf(invoice);
   const xlsxBuf = isConfirmation
     ? await reconExcel.buildConfirmationWorkbook(leads)

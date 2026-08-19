@@ -38,16 +38,16 @@ test('full run: invoice emailed with 2 attachments, artifacts on disk, recon sen
   await seedDay();
   const sent = [];
   const summary = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
-  assert.strictEqual(summary.invoice.number, 'BlueLion 001');
+  assert.strictEqual(summary.invoice.number, 'BlueLion 0001');
   assert.strictEqual(summary.invoice.email_status, 'sent');
   assert.strictEqual(summary.recons_sent, 1);
   const invMail = sent.find((m) => m.to === 'accounts@bluelion.test');
   assert.strictEqual(invMail.cc, 'anthony@click2leads.co.uk');
-  assert.match(invMail.subject, /Invoice BlueLion 001/);
+  assert.match(invMail.subject, /Invoice BlueLion 0001/);
   assert.match(invMail.text, /18\/07\/2026 00:00 – 18\/07\/2026 23:59/);
   assert.match(invMail.text, /Net Total: £110\.00/);
-  assert.deepStrictEqual(invMail.attachments.map((a) => a.filename), ['Invoice BlueLion 001.pdf', 'Reconciliation BlueLion 001.xlsx']);
-  const inv = await Invoice.findOne({ number: 'BlueLion 001' });
+  assert.deepStrictEqual(invMail.attachments.map((a) => a.filename), ['Invoice BlueLion 0001.pdf', 'Reconciliation BlueLion 0001.xlsx']);
+  const inv = await Invoice.findOne({ number: 'BlueLion 0001' });
   assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.pdf_file)));
   assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.xlsx_file)));
   assert.strictEqual(await ReconSend.countDocuments(), 1);
@@ -94,7 +94,7 @@ test('containment: artifact render failure marks invoice failed, does not crash 
     assert.strictEqual(summary.invoice.email_status, 'failed');
     assert.strictEqual(summary.failed_invoices, 1);
     assert.strictEqual(summary.recons_sent, 1);
-    const inv = await Invoice.findOne({ number: 'BlueLion 001' });
+    const inv = await Invoice.findOne({ number: 'BlueLion 0001' });
     assert.strictEqual(inv.email_error, 'pdf render boom');
     assert.ok(!inv.pdf_file);
   } finally {
@@ -151,7 +151,7 @@ test('recovery: stranded invoice (row saved, artifacts never written) is healed 
     initial_status: 'accepted', search_status: 'virgin', signature_status: 'passed',
   });
   await Invoice.create({
-    number: 'BlueLion 001', seq: 1, type: 'daily',
+    number: 'BlueLion 0001', seq: 1, type: 'daily',
     period_start: oldPeriod, period_end: oldPeriod, invoice_date: new Date('2026-07-17T09:00:00Z'),
     lines: [
       { description: 'PCP Claim Accepted Not Searched', qty: 1, rate: 110, amount: 110 },
@@ -164,15 +164,15 @@ test('recovery: stranded invoice (row saved, artifacts never written) is healed 
   const sent = [];
   const summary = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
   assert.strictEqual(summary.retried, 1);
-  const inv = await Invoice.findOne({ number: 'BlueLion 001' });
+  const inv = await Invoice.findOne({ number: 'BlueLion 0001' });
   assert.strictEqual(inv.email_status, 'sent');
   assert.ok(inv.pdf_file);
   assert.ok(inv.xlsx_file);
   assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.pdf_file)));
   assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.xlsx_file)));
-  const invMail = sent.find((m) => m.subject.includes('BlueLion 001'));
+  const invMail = sent.find((m) => m.subject.includes('BlueLion 0001'));
   assert.ok(invMail, 'stranded invoice should have been emailed');
-  assert.deepStrictEqual(invMail.attachments.map((a) => a.filename), ['Invoice BlueLion 001.pdf', 'Reconciliation BlueLion 001.xlsx']);
+  assert.deepStrictEqual(invMail.attachments.map((a) => a.filename), ['Invoice BlueLion 0001.pdf', 'Reconciliation BlueLion 0001.xlsx']);
 });
 
 test('confirmation invoice generated in the same run, own copy and workbook, idempotent', async () => {
@@ -184,14 +184,14 @@ test('confirmation invoice generated in the same run, own copy and workbook, ide
   });
   const sent = [];
   const summary = await runDaily(NOW, { send: async (m) => { sent.push(m); } });
-  assert.strictEqual(summary.invoice.number, 'BlueLion 001');
-  assert.strictEqual(summary.confirmation_invoice.number, 'BlueLion 002');
+  assert.strictEqual(summary.invoice.number, 'BlueLion 0001');
+  assert.strictEqual(summary.confirmation_invoice.number, 'BlueLion 0002');
   assert.strictEqual(summary.confirmation_invoice.email_status, 'sent');
   const mail = sent.find((m) => /Lender Confirmations/.test(m.subject));
   assert.match(mail.text, /Claims Payable in Full: 1/);
   assert.match(mail.text, /Net Total: £80\.00/);
   assert.match(mail.text, /VAT \(20%\): £16\.00/);
-  assert.deepStrictEqual(mail.attachments.map((a) => a.filename), ['Invoice BlueLion 002.pdf', 'Reconciliation BlueLion 002.xlsx']);
+  assert.deepStrictEqual(mail.attachments.map((a) => a.filename), ['Invoice BlueLion 0002.pdf', 'Reconciliation BlueLion 0002.xlsx']);
   const inv = await Invoice.findOne({ type: 'confirmation' });
   assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.pdf_file)));
   assert.ok(fs.existsSync(path.join(STORAGE_DIR, inv.xlsx_file)));
