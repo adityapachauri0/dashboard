@@ -59,32 +59,26 @@ test('replacement obligation opened yesterday triggers email even with no leads'
   assert.match(recons[0].text, /Fully Payable Leads: 0/);
 });
 
-test('suppliedReplacements window anchors on last_updated (resolution time), not replacement_requested_at (open time)', async () => {
+test('statement covers full history: obligation opened 40 days ago still listed in the owed tab', async () => {
   const a = await mkAff('Claim3000', 'ali@claim3000.co.uk');
   await mkLead(a); // billable lead yesterday — ensures a recon is built
 
   const requestedAt = new Date(NOW.getTime() - 40 * 24 * 3600 * 1000); // opened 40d ago
-  const supplied = await mkLead(a, {
-    replacement_status: 'supplied', replacement_reason: 'signature',
-    replacement_requested_at: requestedAt,
+  const owed = await mkLead(a, {
+    submitted_at: new Date(NOW.getTime() - 41 * 24 * 3600 * 1000),
+    signature_status: 'failed', replacement_status: 'required',
+    replacement_reason: 'signature', replacement_requested_at: requestedAt,
   });
-  // Pin last_updated (resolution/supplied time) to 5 days before NOW, inside the
-  // 30-day window, independent of the real wall clock (timestamps:false trick).
-  await Lead.updateOne(
-    { _id: supplied._id },
-    { $set: { last_updated: new Date(NOW.getTime() - 5 * 24 * 3600 * 1000) } },
-    { timestamps: false }
-  );
 
   const recons = await buildAffiliateRecons(NOW);
   assert.strictEqual(recons.length, 1);
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(recons[0].xlsx);
-  const sup = wb.getWorksheet('Replacements Supplied');
+  const tab = wb.getWorksheet('72h Rejects Not Replaced');
   const refs = [];
-  sup.eachRow((r, i) => { if (i > 1) refs.push(r.getCell(1).value); });
-  assert.ok(refs.includes(supplied.ref),
-    'replacement resolved 5 days ago should appear despite being requested 40 days ago');
+  tab.eachRow((r, i) => { if (i > 1) refs.push(r.getCell(1).value); });
+  assert.ok(refs.includes(owed.ref),
+    'unresolved obligation from 40 days ago should still appear in the owed tab');
 });
 
 test('already-sent day (ReconSend row) is not rebuilt', async () => {

@@ -5,7 +5,7 @@ const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
 const {
   generateInvoiceForDay, generateConfirmationInvoice, money, STORAGE_DIR, ensureStorage,
-  periodBounds, billableFilter, londonDay, LOOKBACK_DAYS, dispositionStats,
+  periodBounds, billableFilter, londonDay, LOOKBACK_DAYS, dispositionStats, bluelionRates,
 } = require('./invoiceService');
 // property access (not destructured) so tests can stub renderInvoicePdf/buildBlueLionWorkbook to fail
 const invoicePdf = require('./invoicePdf');
@@ -136,7 +136,11 @@ async function ensureArtifacts(invoice, leads) {
   const pdfBuf = await invoicePdf.renderInvoicePdf(invoice);
   const xlsxBuf = isConfirmation
     ? await reconExcel.buildConfirmationWorkbook(leads)
-    : await reconExcel.buildBlueLionWorkbook(leads, await dispositionStats(periodBounds(invoice.period_end)));
+    : await reconExcel.buildBlueLionWorkbook(leads, {
+      leads: await Lead.find({}).sort({ submitted_at: 1 })
+        .populate('affiliate_id', 'name').populate('replaces_lead', 'ref').populate('replaced_by_lead', 'ref').lean(),
+      rates: bluelionRates(),
+    });
   fs.writeFileSync(path.join(STORAGE_DIR, pdfFile), pdfBuf);
   fs.writeFileSync(path.join(STORAGE_DIR, xlsxFile), xlsxBuf);
   invoice.pdf_file = pdfFile;

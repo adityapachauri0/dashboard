@@ -83,19 +83,11 @@ async function buildAffiliateRecons(now = new Date()) {
         continue;
       }
 
-      // Current-state tabs — not bounded to `day`, so a replacement opened or
-      // resolved on any earlier day still shows up regardless of which day's
-      // recon this is.
-      const openReplacements = await Lead.find({ affiliate_id: a._id, replacement_status: 'required' })
-        .sort({ replacement_requested_at: 1 }).lean();
-      // Bounded on last_updated (resolution time), not replacement_requested_at
-      // (open time): Lead has no dedicated supplied-at field, and last_updated
-      // (Mongoose updatedAt) is stamped when replacement_status transitions to
-      // supplied/closed, so it approximates when the replacement was resolved.
-      const suppliedReplacements = await Lead.find({
-        affiliate_id: a._id, replacement_status: { $in: ['supplied', 'closed'] },
-        last_updated: { $gte: new Date(now.getTime() - 30 * 24 * 3600 * 1000) },
-      }).populate('replaced_by_lead', 'ref').lean();
+      // Statement tabs cover the affiliate's FULL history (bank-statement
+      // model, client spec 2026-08-19) — replacements, rejects and cancels
+      // all appear there regardless of which day's recon this is.
+      const statementLeads = await Lead.find({ affiliate_id: a._id }).sort({ submitted_at: 1 })
+        .populate('replaces_lead', 'ref').populate('replaced_by_lead', 'ref').lean();
       const confirmedLeads = await Lead.find({
         affiliate_id: a._id, payable_status: 'payable_full',
         last_updated: { $gte: bounds.start, $lt: bounds.end },
@@ -113,8 +105,7 @@ async function buildAffiliateRecons(now = new Date()) {
       };
       const { subject, text, html } = reconEmail({ affiliate: a, day, counts, amounts, dispo: dispo.counts });
       const xlsx = await buildAffiliateWorkbook({
-        affiliate: a, dayLeads, openReplacements, suppliedReplacements, confirmedLeads,
-        rejectedLeads: dispo.rejected, cancelledLeads: dispo.cancellations,
+        affiliate: a, dayLeads, confirmedLeads, statementLeads,
       });
       out.push({ affiliate_id: a._id, name: a.name, to: a.contact_email, day, subject, text, html, xlsx });
     }
