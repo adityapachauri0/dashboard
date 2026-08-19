@@ -20,7 +20,7 @@ function sheet(wb, name, columns) {
   return ws;
 }
 
-async function buildBlueLionWorkbook(allLeads) {
+async function buildBlueLionWorkbook(allLeads, dispo = null) {
   const leads = allLeads.filter(knownStatus);
   const rates = bluelionRates();
   const wb = new ExcelJS.Workbook();
@@ -47,7 +47,34 @@ async function buildBlueLionWorkbook(allLeads) {
   }
   const totalRow = sum.addRow(['TOTAL', tv, ts, tv + ts]);
   totalRow.font = { bold: true };
+  if (dispo) addDispositionTabs(wb, dispo);
   return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+// Non-billable disposition tabs so the workbook carries the whole day's
+// supply, not just the invoiced subset.
+function addDispositionTabs(wb, dispo) {
+  const aff = (l) => safe(l.affiliate_id?.name || 'unknown');
+
+  const rej = sheet(wb, 'Rejected Leads', [
+    ['Lead Reference', 20], ['Submission Date', 22], ['Affiliate', 18], ['Rejection Reason', 34],
+  ]);
+  for (const l of dispo.rejected) rej.addRow([safe(l.ref), ukDate(l.submitted_at), aff(l), safe(l.rejection_reason || '')]);
+
+  const sig = sheet(wb, 'Signature Failures', [
+    ['Lead Reference', 20], ['Submission Date', 22], ['Affiliate', 18], ['Failed On', 22],
+  ]);
+  for (const l of dispo.signatureFails) sig.addRow([safe(l.ref), ukDate(l.submitted_at), aff(l), ukDate(l.replacement_requested_at)]);
+
+  const can = sheet(wb, 'Cancellations', [
+    ['Lead Reference', 20], ['Submission Date', 22], ['Affiliate', 18], ['Cancelled On', 22],
+  ]);
+  for (const l of dispo.cancellations) can.addRow([safe(l.ref), ukDate(l.submitted_at), aff(l), ukDate(l.cancelled_at)]);
+
+  const rep = sheet(wb, 'Replacements Supplied', [
+    ['Replacement Lead', 20], ['Replaces Lead', 20], ['Affiliate', 18], ['Supplied On', 22],
+  ]);
+  for (const l of dispo.replacementsSupplied) rep.addRow([safe(l.ref), safe(l.replaces_lead?.ref || ''), aff(l), ukDate(l.submitted_at)]);
 }
 
 // Recon for a confirmation invoice: every row is a lender-confirmed claim at
@@ -79,7 +106,7 @@ async function buildConfirmationWorkbook(leads) {
 
 const H72 = 72 * 3600 * 1000;
 
-async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, suppliedReplacements, confirmedLeads }) {
+async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, suppliedReplacements, confirmedLeads, rejectedLeads = [], cancelledLeads = [] }) {
   const rc = affiliate.rate_card || {};
   const wb = new ExcelJS.Workbook();
 
@@ -114,6 +141,16 @@ async function buildAffiliateWorkbook({ affiliate, dayLeads, openReplacements, s
   for (const l of confirmedLeads) {
     conf.addRow([safe(l.ref), ukDate(l.submitted_at), PAY_LABELS[l.payable_status] || l.payable_status]);
   }
+
+  const rej = sheet(wb, 'Rejected Leads', [
+    ['Lead Reference', 20], ['Submission Date', 22], ['Rejection Reason', 34],
+  ]);
+  for (const l of rejectedLeads) rej.addRow([safe(l.ref), ukDate(l.submitted_at), safe(l.rejection_reason || '')]);
+
+  const can = sheet(wb, 'Cancellations', [
+    ['Lead Reference', 20], ['Submission Date', 22], ['Cancelled On', 22],
+  ]);
+  for (const l of cancelledLeads) can.addRow([safe(l.ref), ukDate(l.submitted_at), ukDate(l.cancelled_at)]);
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

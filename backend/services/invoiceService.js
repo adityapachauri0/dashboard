@@ -60,6 +60,35 @@ const bluelionRates = () => ({
   searched: Number(process.env.BLUELION_SEARCHED_RATE || 30),
 });
 
+// Day's non-billable dispositions, event-dated: rejects by submission day,
+// signature failures by when the obligation opened, cancellations by when the
+// cooling-off notification arrived, replacements by the replacement's own
+// submission day. Powers the email-body totals and the workbook tabs.
+async function dispositionStats(bounds, extraFilter = {}) {
+  const period = { $gte: bounds.start, $lt: bounds.end };
+  const q = (filter, sortField) => Lead.find({ ...extraFilter, ...filter })
+    .sort({ [sortField]: 1 }).populate('affiliate_id', 'name').lean();
+  const [rejected, signatureFails, cancellations, replacementsSupplied] = await Promise.all([
+    q({ submitted_at: period, initial_status: 'rejected' }, 'submitted_at'),
+    q({
+      replacement_requested_at: period,
+      $or: [{ replacement_reason: 'signature' }, { replacement_reason: { $exists: false } }],
+    }, 'replacement_requested_at'),
+    q({ cancelled: true, cancelled_at: period }, 'cancelled_at'),
+    Lead.find({ ...extraFilter, submitted_at: period, replaces_lead: { $ne: null } })
+      .sort({ submitted_at: 1 }).populate('affiliate_id', 'name').populate('replaces_lead', 'ref').lean(),
+  ]);
+  return {
+    rejected, signatureFails, cancellations, replacementsSupplied,
+    counts: {
+      rejected: rejected.length,
+      signature_fails: signatureFails.length,
+      cancellations: cancellations.length,
+      replacements_supplied: replacementsSupplied.length,
+    },
+  };
+}
+
 function buildLines(counts, rates) {
   const lines = [
     { description: LINE_VIRGIN, qty: counts.virgin, rate: rates.virgin, amount: round2(counts.virgin * rates.virgin) },
@@ -195,7 +224,7 @@ const ensureStorage = () => fs.mkdirSync(STORAGE_DIR, { recursive: true });
 module.exports = {
   LINE_VIRGIN, LINE_SEARCHED, LINE_CONFIRMATION, PAY_LABELS, VAT_RATE, LOOKBACK_DAYS,
   round2, money, gbp, londonDay, ddmmyyyy, periodBounds, billableFilter,
-  bluelionRates, buildLines, previewDailyInvoice, previewInvoiceForDay,
+  bluelionRates, buildLines, dispositionStats, previewDailyInvoice, previewInvoiceForDay,
   generateDailyInvoice, generateInvoiceForDay,
   confirmationRate, confirmationFilter, buildConfirmationLines,
   previewConfirmationInvoice, generateConfirmationInvoice, releaseOrphanConfirmationClaims,

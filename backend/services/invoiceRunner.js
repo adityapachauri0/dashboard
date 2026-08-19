@@ -5,7 +5,7 @@ const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
 const {
   generateInvoiceForDay, generateConfirmationInvoice, money, STORAGE_DIR, ensureStorage,
-  periodBounds, billableFilter, londonDay, LOOKBACK_DAYS,
+  periodBounds, billableFilter, londonDay, LOOKBACK_DAYS, dispositionStats,
 } = require('./invoiceService');
 // property access (not destructured) so tests can stub renderInvoicePdf/buildBlueLionWorkbook to fail
 const invoicePdf = require('./invoicePdf');
@@ -21,10 +21,11 @@ function recipients() {
   return { to, cc };
 }
 
-function invoiceEmail(invoice) {
+async function invoiceEmail(invoice) {
   if (invoice.type === 'confirmation') return confirmationEmail(invoice);
   const period = ddmmyyyyFromDay(invoice.period_end);
   const [virgin, searched] = invoice.lines;
+  const { counts: d } = await dispositionStats(periodBounds(invoice.period_end));
   const subject = `Invoice ${invoice.number} – Kickbyte Media Ltd – ${period}`;
   const text = `Good morning,
 
@@ -44,6 +45,10 @@ Invoice Summary
 
 - Fully Payable Leads: ${virgin.qty}
 - Part-Payable Leads: ${searched.qty}
+- Rejected Leads: ${d.rejected}
+- Signature Failures: ${d.signature_fails}
+- Cancellations (14-Day Cooling-Off): ${d.cancellations}
+- Replacements Supplied: ${d.replacements_supplied}
 
 Net Total: £${money(invoice.net)}
 VAT (20%): £${money(invoice.vat)}
@@ -93,7 +98,7 @@ function attachmentsFor(invoice) {
 
 async function emailInvoice(invoice, send) {
   const { to, cc } = recipients();
-  const { subject, text, html } = invoiceEmail(invoice);
+  const { subject, text, html } = await invoiceEmail(invoice);
   try {
     await send({ to, cc, subject, text, html, attachments: attachmentsFor(invoice) });
     invoice.email_to = to;
@@ -131,7 +136,7 @@ async function ensureArtifacts(invoice, leads) {
   const pdfBuf = await invoicePdf.renderInvoicePdf(invoice);
   const xlsxBuf = isConfirmation
     ? await reconExcel.buildConfirmationWorkbook(leads)
-    : await reconExcel.buildBlueLionWorkbook(leads);
+    : await reconExcel.buildBlueLionWorkbook(leads, await dispositionStats(periodBounds(invoice.period_end)));
   fs.writeFileSync(path.join(STORAGE_DIR, pdfFile), pdfBuf);
   fs.writeFileSync(path.join(STORAGE_DIR, xlsxFile), xlsxBuf);
   invoice.pdf_file = pdfFile;

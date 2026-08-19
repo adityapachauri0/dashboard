@@ -48,7 +48,7 @@ router.post('/invoices/:id/resend', async (req, res) => {
   const inv = await Invoice.findById(req.params.id);
   if (!inv) return res.status(404).json({ error: 'not found' });
   if (!inv.pdf_file || !inv.xlsx_file) return res.status(409).json({ error: 'artifacts not stored' });
-  const { subject, text, html } = invoiceEmail(inv);
+  const { subject, text, html } = await invoiceEmail(inv);
   const { to, cc } = recipients();
   try {
     await mailer.sendAccountsMail({

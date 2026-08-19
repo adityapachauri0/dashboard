@@ -1,12 +1,12 @@
 const Affiliate = require('../models/Affiliate');
 const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
-const { billableFilter, periodBounds, londonDay, round2, money, VAT_RATE, LOOKBACK_DAYS } = require('./invoiceService');
+const { billableFilter, periodBounds, londonDay, round2, money, VAT_RATE, LOOKBACK_DAYS, dispositionStats } = require('./invoiceService');
 const { buildAffiliateWorkbook } = require('./reconExcel');
 
 const ddmmyyyyFromDay = (day) => day.split('-').reverse().join('/');
 
-function reconEmail({ affiliate, day, counts, amounts }) {
+function reconEmail({ affiliate, day, counts, amounts, dispo }) {
   const dateStr = ddmmyyyyFromDay(day);
   const net = round2(amounts.full + amounts.part);
   const vat = round2(net * VAT_RATE);
@@ -25,6 +25,10 @@ Company Registration No. 16487857
 Lead Summary
 - Fully Payable Leads: ${counts.full} × £${money(amounts.fullRate)} = £${money(amounts.full)}
 - Part-Payable Leads: ${counts.part} × £${money(amounts.partRate)} = £${money(amounts.part)}
+- Rejected Leads: ${dispo.rejected}
+- Signature Failures: ${dispo.signature_fails}
+- Cancellations (14-Day Cooling-Off): ${dispo.cancellations}
+- Replacements Supplied: ${dispo.replacements_supplied}
 
 Total Accepted Leads: ${counts.full + counts.part}
 Net Amount: £${money(net)}
@@ -71,7 +75,9 @@ async function buildAffiliateRecons(now = new Date()) {
         affiliate_id: a._id, replacement_status: 'required',
         replacement_requested_at: { $gte: bounds.start, $lt: bounds.end },
       });
-      if (!dayLeads.length && !newObligations) continue;
+      const dispo = await dispositionStats(bounds, { affiliate_id: a._id });
+      const dispoActivity = Object.values(dispo.counts).some(Boolean);
+      if (!dayLeads.length && !newObligations && !dispoActivity) continue;
       if (!a.contact_email) {
         console.warn(`recon: affiliate ${a.name} has activity but no contact_email — skipped`);
         continue;
@@ -105,9 +111,10 @@ async function buildAffiliateRecons(now = new Date()) {
         full: round2(counts.full * (rc.virgin_rate || 0)),
         part: round2(counts.part * (rc.searched_upfront_rate || 0)),
       };
-      const { subject, text, html } = reconEmail({ affiliate: a, day, counts, amounts });
+      const { subject, text, html } = reconEmail({ affiliate: a, day, counts, amounts, dispo: dispo.counts });
       const xlsx = await buildAffiliateWorkbook({
         affiliate: a, dayLeads, openReplacements, suppliedReplacements, confirmedLeads,
+        rejectedLeads: dispo.rejected, cancelledLeads: dispo.cancellations,
       });
       out.push({ affiliate_id: a._id, name: a.name, to: a.contact_email, day, subject, text, html, xlsx });
     }
