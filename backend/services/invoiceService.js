@@ -68,7 +68,9 @@ async function dispositionStats(bounds, extraFilter = {}) {
   const period = { $gte: bounds.start, $lt: bounds.end };
   const q = (filter, sortField) => Lead.find({ ...extraFilter, ...filter })
     .sort({ [sortField]: 1 }).populate('affiliate_id', 'name').lean();
-  const [rejected, signatureFails, cancellations, replacementsSupplied] = await Promise.all([
+  const [received, accepted, rejected, signatureFails, cancellations, replacementsSupplied] = await Promise.all([
+    Lead.countDocuments({ ...extraFilter, submitted_at: period }),
+    Lead.countDocuments({ ...extraFilter, submitted_at: period, initial_status: 'accepted' }),
     q({ submitted_at: period, initial_status: 'rejected' }, 'submitted_at'),
     q({
       replacement_requested_at: period,
@@ -81,6 +83,9 @@ async function dispositionStats(bounds, extraFilter = {}) {
   return {
     rejected, signatureFails, cancellations, replacementsSupplied,
     counts: {
+      received,
+      accepted,
+      awaiting: received - accepted - rejected.length,
       rejected: rejected.length,
       signature_fails: signatureFails.length,
       cancellations: cancellations.length,

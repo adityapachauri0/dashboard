@@ -43,9 +43,17 @@ For ease of reconciliation, we have also attached a supporting Excel workbook co
 
 Invoice Summary
 
+Leads supplied during the period:
+- Total Leads Received: ${d.received}
+- Rejected at Intake: ${d.rejected}
+- Awaiting Acceptance: ${d.awaiting}
+- Accepted: ${d.accepted}
+
+Billable on this invoice:
 - Fully Payable Leads: ${virgin.qty}
 - Part-Payable Leads: ${searched.qty}
-- Rejected Leads: ${d.rejected}
+
+Updates during the period (may relate to previously supplied leads):
 - Signature Failures: ${d.signature_fails}
 - Cancellations (14-Day Cooling-Off): ${d.cancellations}
 - Replacements Supplied: ${d.replacements_supplied}

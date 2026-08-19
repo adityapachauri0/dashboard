@@ -23,9 +23,18 @@ VAT Registration No.: 511270734
 Company Registration No. 16487857
 
 Lead Summary
+
+Leads supplied on ${dateStr}:
+- Total Leads Received: ${dispo.received}
+- Rejected at Intake: ${dispo.rejected}
+- Awaiting Acceptance: ${dispo.awaiting}
+- Accepted: ${dispo.accepted}
+
+Payable in this reconciliation:
 - Fully Payable Leads: ${counts.full} × £${money(amounts.fullRate)} = £${money(amounts.full)}
 - Part-Payable Leads: ${counts.part} × £${money(amounts.partRate)} = £${money(amounts.part)}
-- Rejected Leads: ${dispo.rejected}
+
+Updates on ${dateStr} (may relate to previously supplied leads):
 - Signature Failures: ${dispo.signature_fails}
 - Cancellations (14-Day Cooling-Off): ${dispo.cancellations}
 - Replacements Supplied: ${dispo.replacements_supplied}
