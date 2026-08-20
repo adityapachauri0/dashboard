@@ -103,13 +103,11 @@ async function renderInvoicePdf(invoice) {
   wipe(L.totals.label_wipe_x, L.balance.y, C.cols.amount_r - L.totals.label_wipe_x + 2, 16);
   rtext(gbp(invoice.gross), C.cols.amount_r, L.balance.y, { f: bold, size: L.balance.size });
 
-  // VAT summary row. Client decision 2026-08-19: the NET column carries the
-  // VAT figure too (not the net amount) — net/total already appear in the
-  // totals block above.
+  // VAT summary row: VAT and NET amounts
   wipe(L.vatSummary.vat_r - 70, L.vatSummary.y, 72);
   rtext(money(invoice.vat), L.vatSummary.vat_r, L.vatSummary.y);
   wipe(L.vatSummary.net_r - 70, L.vatSummary.y, 72);
-  rtext(money(invoice.vat), L.vatSummary.net_r, L.vatSummary.y);
+  rtext(money(invoice.net), L.vatSummary.net_r, L.vatSummary.y);
 
   return Buffer.from(await pdf.save());
 }
