@@ -5,7 +5,7 @@ const Lead = require('../models/Lead');
 const ReconSend = require('../models/ReconSend');
 const {
   generateInvoiceForDay, generateConfirmationInvoice, money, STORAGE_DIR, ensureStorage,
-  periodBounds, billableFilter, londonDay, LOOKBACK_DAYS, dispositionStats, bluelionRates,
+  periodBounds, londonDay, LOOKBACK_DAYS, dispositionStats, bluelionRates,
 } = require('./invoiceService');
 // property access (not destructured) so tests can stub renderInvoicePdf/buildBlueLionWorkbook to fail
 const invoicePdf = require('./invoicePdf');
@@ -131,20 +131,24 @@ async function emailInvoice(invoice, send) {
 // self-healing on the next run instead of looking "done" with missing files.
 async function ensureArtifacts(invoice, leads) {
   const isConfirmation = invoice.type === 'confirmation';
-  if (!leads) {
-    leads = isConfirmation
-      ? await Lead.find({ confirmation_invoice: invoice._id })
-        .sort({ payable_full_at: 1 }).populate('affiliate_id', 'name rate_card').lean()
-      : await Lead.find(billableFilter(periodBounds(invoice.period_end)))
-        .sort({ submitted_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
+  if (isConfirmation && !leads) {
+    leads = await Lead.find({ confirmation_invoice: invoice._id })
+      .sort({ payable_full_at: 1 }).populate('affiliate_id', 'name rate_card').lean();
   }
   const seq4 = String(invoice.seq).padStart(4, '0');
   const pdfFile = `BlueLion-${seq4}.pdf`;
   const xlsxFile = `BlueLion-${seq4}.xlsx`;
   const pdfBuf = await invoicePdf.renderInvoicePdf(invoice);
+  // Daily workbook: Leads tab lists EVERY lead supplied in the period (client
+  // rule Aug 20 — cancelled/rejected/part-paid included), so query the full
+  // period rather than reusing the billable list the invoice was built from;
+  // the workbook builder derives billability per row itself.
+  const bounds = periodBounds(invoice.period_end);
   const xlsxBuf = isConfirmation
     ? await reconExcel.buildConfirmationWorkbook(leads)
-    : await reconExcel.buildBlueLionWorkbook(leads, {
+    : await reconExcel.buildBlueLionWorkbook(
+      await Lead.find({ submitted_at: { $gte: bounds.start, $lt: bounds.end } })
+        .sort({ submitted_at: 1 }).populate('affiliate_id', 'name rate_card').lean(), {
       leads: await Lead.find({}).sort({ submitted_at: 1 })
         .populate('affiliate_id', 'name').populate('replaces_lead', 'ref').populate('replaced_by_lead', 'ref').lean(),
       rates: bluelionRates(),

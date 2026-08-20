@@ -27,7 +27,8 @@ async function main() {
   await connectDB();
 
   if (dryRun) {
-    const { previewInvoiceForDay, money, LOOKBACK_DAYS, londonDay } = require('../services/invoiceService');
+    const { previewInvoiceForDay, money, LOOKBACK_DAYS, londonDay, periodBounds } = require('../services/invoiceService');
+    const Lead = require('../models/Lead');
     const { renderInvoicePdf } = require('../services/invoicePdf');
     const { buildBlueLionWorkbook } = require('../services/reconExcel');
     const { buildAffiliateRecons } = require('../services/affiliateRecon');
@@ -52,7 +53,10 @@ async function main() {
         fs.mkdirSync(out, { recursive: true });
         const fake = { number: 'BlueLion DRY', invoice_date: now, lines: p.calc.lines, net: p.calc.net, vat: p.calc.vat, gross: p.calc.gross, period_end: p.day };
         fs.writeFileSync(path.join(out, 'dry-invoice.pdf'), await renderInvoicePdf(fake));
-        fs.writeFileSync(path.join(out, 'dry-reconciliation.xlsx'), await buildBlueLionWorkbook(p.leads));
+        const bounds = periodBounds(day);
+        fs.writeFileSync(path.join(out, 'dry-reconciliation.xlsx'), await buildBlueLionWorkbook(
+          await Lead.find({ submitted_at: { $gte: bounds.start, $lt: bounds.end } })
+            .sort({ submitted_at: 1 }).populate('affiliate_id', 'name').lean()));
         console.log(`artifacts written to ${out}`);
       }
     }

@@ -20,8 +20,19 @@ function sheet(wb, name, columns) {
   return ws;
 }
 
+// JS mirror of invoiceService.billableFilter — keep the two in sync. Lets the
+// Leads tab list EVERY lead of the period (client rule Aug 20: cancelled,
+// rejected, part-paid all visible) while pricing only the billable ones.
+const isBillable = (l) => l.initial_status === 'accepted' && !l.cancelled
+  && l.signature_status !== 'failed' && !l.replaced_by_lead && knownStatus(l);
+const statusLabel = (l) => {
+  if (l.initial_status === 'rejected') return 'Rejected at intake';
+  if (l.cancelled) return 'Cancelled (cooling-off)';
+  if (l.signature_status === 'failed') return 'Signature failed';
+  return PAY_LABELS[l.payable_status] || l.payable_status;
+};
+
 async function buildBlueLionWorkbook(allLeads, statement = null) {
-  const leads = allLeads.filter(knownStatus);
   const rates = bluelionRates();
   const wb = new ExcelJS.Workbook();
   const ws = sheet(wb, 'Leads', [
@@ -29,12 +40,14 @@ async function buildBlueLionWorkbook(allLeads, statement = null) {
     ['Payment Status', 28], ['Invoice Category', 34], ['Invoice Value', 13],
   ]);
   const byAff = new Map();
-  for (const l of leads) {
+  for (const l of allLeads) {
     const name = l.affiliate_id?.name || 'unknown';
     const id = String(l.affiliate_id?._id ?? l.affiliate_id ?? 'unknown');
+    const billable = isBillable(l);
     ws.addRow([safe(l.ref), ukDate(l.submitted_at), safe(name), l.search_status,
-      PAY_LABELS[l.payable_status] || l.payable_status, category(l),
-      l.search_status === 'virgin' ? rates.virgin : rates.searched]);
+      statusLabel(l), billable ? category(l) : '',
+      billable ? (l.search_status === 'virgin' ? rates.virgin : rates.searched) : '']);
+    if (!billable) continue;
     const a = byAff.get(id) || { name, virgin: 0, searched: 0 };
     a[l.search_status] += 1;
     byAff.set(id, a);

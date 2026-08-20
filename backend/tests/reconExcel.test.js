@@ -6,7 +6,7 @@ const { buildBlueLionWorkbook, buildAffiliateWorkbook } = require('../services/r
 const lead = (over = {}) => ({
   ref: 'KB-2026-000001', submitted_at: new Date('2026-07-18T10:00:00Z'),
   affiliate_id: { _id: 'aff-claim3000', name: 'Claim3000', rate_card: { virgin_rate: 40, searched_upfront_rate: 15 } },
-  search_status: 'virgin', payable_status: 'payable', ...over,
+  initial_status: 'accepted', search_status: 'virgin', payable_status: 'payable', ...over,
 });
 
 async function load(buf) {
@@ -31,6 +31,32 @@ test('bluelion workbook: lead rows, category, affiliate summary with totals', as
   assert.deepStrictEqual(rows[0], ['Affiliate', 'Non Search', 'Previous Search', 'Total']);
   assert.ok(rows.some((r) => r[0] === 'Claim3000' && r[1] === 1 && r[2] === 1 && r[3] === 2));
   assert.deepStrictEqual(rows.at(-1), ['TOTAL', 2, 1, 3]);
+});
+
+test('bluelion Leads tab lists non-billable leads with status labels, priced blank, summary billable-only', async () => {
+  const buf = await buildBlueLionWorkbook([
+    lead(),
+    lead({ ref: 'KB-2026-000002', initial_status: 'rejected', search_status: 'unknown', payable_status: 'not_payable' }),
+    lead({ ref: 'KB-2026-000003', cancelled: true, cancelled_at: new Date('2026-07-20T10:00:00Z'), payable_status: 'not_payable' }),
+    lead({ ref: 'KB-2026-000004', signature_status: 'failed', payable_status: 'not_payable' }),
+  ]);
+  const wb = await load(buf);
+  const leads = wb.getWorksheet('Leads');
+  assert.strictEqual(leads.rowCount, 5); // header + all 4, not just the billable one
+  const rows = [];
+  leads.eachRow((r) => rows.push(r.values.slice(1)));
+  const byRef = Object.fromEntries(rows.slice(1).map((r) => [r[0], r]));
+  assert.strictEqual(byRef['KB-2026-000002'][4], 'Rejected at intake');
+  assert.strictEqual(byRef['KB-2026-000003'][4], 'Cancelled (cooling-off)');
+  assert.strictEqual(byRef['KB-2026-000004'][4], 'Signature failed');
+  for (const ref of ['KB-2026-000002', 'KB-2026-000003', 'KB-2026-000004']) {
+    assert.ok(!byRef[ref][6], `${ref} must have no invoice value`);
+  }
+  assert.strictEqual(byRef['KB-2026-000001'][6], 110); // billable virgin still priced
+  const summary = wb.getWorksheet('Affiliate Summary');
+  const sumRows = [];
+  summary.eachRow((r) => sumRows.push(r.values.slice(1)));
+  assert.deepStrictEqual(sumRows.at(-1), ['TOTAL', 1, 0, 1]); // only the billable lead counted
 });
 
 test('affiliate workbook: statement tabs, affiliate rates, cohort rows, running balances', async () => {
@@ -98,14 +124,15 @@ test('affiliate workbook: statement tabs, affiliate rates, cohort rows, running 
   assert.strictEqual(closing[7], 1); // replacements still owed
 });
 
-test('bluelion workbook: unknown search_status excluded from Leads and Affiliate Summary', async () => {
+test('bluelion workbook: unknown search_status listed but unpriced and out of Affiliate Summary', async () => {
   const buf = await buildBlueLionWorkbook([
     lead(),
     lead({ ref: 'KB-2026-000002', search_status: 'unknown' }),
   ]);
   const wb = await load(buf);
   const leads = wb.getWorksheet('Leads');
-  assert.strictEqual(leads.rowCount, 2); // header + 1 (unknown excluded)
+  assert.strictEqual(leads.rowCount, 3); // header + both (client rule: every lead listed)
+  assert.ok(!leads.getRow(3).getCell(7).value, 'unknown-status lead must have no invoice value');
   const summary = wb.getWorksheet('Affiliate Summary');
   const rows = [];
   summary.eachRow((r) => rows.push(r.values.slice(1)));
